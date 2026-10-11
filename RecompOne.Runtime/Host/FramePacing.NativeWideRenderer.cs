@@ -1237,17 +1237,22 @@ public static partial class FramePacing
     }
 
     // Local points of a convex shape: false when it is wholly inside the 4:3
-    // core or wholly outside the 16:9 view.
+    // core, wholly outside the 16:9 view or wholly behind the near plane.
     static bool NativeWidePointsTouchSides(
         ReadOnlySpan<Vector3> points, NativeWideWorld world, short[] matrix, float near,
         int projection, int screenX, int screenY, int drawX, int drawY,
         float viewCenterX, float viewCenterY, float coreHalf, float wideHalf, float halfHeight)
     {
         float minX = float.MaxValue, maxX = float.MinValue, minY = float.MaxValue, maxY = float.MinValue;
+        int behind = 0;
         foreach (var p in points)
         {
             float z = MathF.Floor((matrix[6] * p.X + matrix[7] * p.Y + matrix[8] * p.Z) / 4096f) + world.Z;
-            if (z < near) return true;
+            if (z < near)
+            {
+                behind++;
+                continue;
+            }
             float x = MathF.Floor((matrix[0] * p.X + matrix[1] * p.Y + matrix[2] * p.Z) / 4096f) + world.X;
             float y = MathF.Floor((matrix[3] * p.X + matrix[4] * p.Y + matrix[5] * p.Z) / 4096f) + world.Y;
             float sx = NativeWideProjectAxis(x, z, projection, drawX + screenX);
@@ -1255,6 +1260,7 @@ public static partial class FramePacing
             minX = Math.Min(minX, sx); maxX = Math.Max(maxX, sx);
             minY = Math.Min(minY, sy); maxY = Math.Max(maxY, sy);
         }
+        if (behind > 0) return behind < points.Length;
         if (maxX < viewCenterX - wideHalf || minX > viewCenterX + wideHalf) return false;
         if (minX >= viewCenterX - coreHalf && maxX <= viewCenterX + coreHalf) return false;
         return maxY >= viewCenterY - halfHeight && minY <= viewCenterY + halfHeight;
