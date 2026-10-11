@@ -61,7 +61,34 @@ public static partial class FramePacing
             PaceLog($"native-wide level={level} tower and wall repairs={lab.Count}");
             return _nativeWideSceneryRepairs[labKey] = lab;
         }
-        if (level is not (7 or 9 or 12 or 15 or 17 or 18 or 24 or 26 or 32 or 35 or 44 or 46 or 55)) return Array.Empty<NativeWideRepair>();
+        if (level == 35 && NativeWideSunsetSky(m, world))
+        {
+            var skyKey = new NativeWideSceneryKey(level, m.ReadU32(world.Header), m.ReadU32(world.Header + 4),
+                m.ReadU32(world.Header + 8), world.PolyCount, world.VertexCount);
+            if (_nativeWideSkyArcs.TryGetValue(skyKey, out var sunsetSky)) return sunsetSky;
+            sunsetSky = NativeWideSunsetSkyRepairs(m, world);
+            PaceLog($"native-wide level={level} sky repairs={sunsetSky.Count}");
+            return _nativeWideSkyArcs[skyKey] = sunsetSky;
+        }
+        if (level == 35 && NativeWideSunsetStart(m, world))
+        {
+            var startKey = new NativeWideSceneryKey(level, m.ReadU32(world.Header), m.ReadU32(world.Header + 4),
+                m.ReadU32(world.Header + 8), world.PolyCount, world.VertexCount);
+            if (_nativeWideSceneryRepairs.TryGetValue(startKey, out var start)) return start;
+            start = NativeWideSunsetStartRepairs(m, world);
+            PaceLog($"native-wide level={level} start repairs={start.Count}");
+            return _nativeWideSceneryRepairs[startKey] = start;
+        }
+        if (NativeWideSunsetTemple(m, world))
+        {
+            var templeKey = new NativeWideSceneryKey(level, m.ReadU32(world.Header), m.ReadU32(world.Header + 4),
+                m.ReadU32(world.Header + 8), world.PolyCount, world.VertexCount);
+            if (_nativeWideSceneryRepairs.TryGetValue(templeKey, out var temple)) return temple;
+            temple = NativeWideSunsetRepairs(m, world);
+            PaceLog($"native-wide level={level} temple wall repairs={temple.Count}");
+            return _nativeWideSceneryRepairs[templeKey] = temple;
+        }
+        if (level is not (7 or 9 or 12 or 15 or 17 or 18 or 24 or 26 or 32 or 44 or 46 or 55)) return Array.Empty<NativeWideRepair>();
         bool gate = level == 18 && world.PolyCount == 2620 && world.VertexCount == 3114
             && m.ReadU32(world.Header) == 46280 && (int)m.ReadU32(world.Header + 4) == -45049
             && (int)m.ReadU32(world.Header + 8) == -2060;
@@ -209,22 +236,8 @@ public static partial class FramePacing
                 [new(new(1590, -14400, -3000), new(1990, -12000, 1600))]),
                 _ => null,
             };
-        // Sunset Vista's temple interior: climbing shafts and the rooms between them.
-        // The outdoor opening and its corridor are not included.
-        bool sunset = level == 35 && world.PolyCount == 3463 && world.VertexCount == 3183
-            && m.ReadU32(world.Header) == 110000 && (int)m.ReadU32(world.Header + 4) == -82800
-            && (int)m.ReadU32(world.Header + 8) == -4400;
-        bool temple = NativeWideSunsetTemple(m, world);
-        // The first two shafts share the temple's outer left wall (absolute X
-        // 111200). Rooms and forest lie beyond it, so its continuation must hide them.
-        float outerWall = !temple ? float.NaN : ((int)m.ReadU32(world.Header), (int)m.ReadU32(world.Header + 4)) switch
-        {
-            (110000, -82800) => 1200,
-            (113200, -64800) => -2000,
-            _ => float.NaN,
-        };
         bool scenery = gate || fortress || jungle || castle || slippery || upstream || creek || creekNext || hog
-            || temple || hallWalls != null || doorCells != null || copies != null;
+            || hallWalls != null || doorCells != null || copies != null;
         if (!scenery) return Array.Empty<NativeWideRepair>();
         // Several loaded meshes can need different additions in the same level.
         // Identify the asset, not its transient RAM address or the level alone.
@@ -266,34 +279,6 @@ public static partial class FramePacing
                 var edge = NativeWideEdgeKey(triangles[o + ei], triangles[o + (ei + 1) % 3]);
                 edges[edge] = edges.TryGetValue(edge, out var owner)
                     ? owner with { Count = owner.Count + 1 } : new NativeWideEdgeOwner(pi, ei, 1);
-            }
-        }
-
-        // Temple walls are axis aligned: side walls in X planes, back walls in Z planes.
-        Dictionary<float, List<int>>? xPlanes = null, zPlanes = null;
-        Dictionary<float, float>? wallBack = null;
-        if (temple)
-        {
-            xPlanes = []; zPlanes = [];
-            for (int pi = 0; pi < world.PolyCount; pi++)
-            {
-                var t0 = triangles[pi * 3]; var t1 = triangles[pi * 3 + 1]; var t2 = triangles[pi * 3 + 2];
-                if (t0.X == t1.X && t1.X == t2.X) AddNativeWidePlane(xPlanes, t0.X, pi);
-                if (t0.Z == t1.Z && t1.Z == t2.Z) AddNativeWidePlane(zPlanes, t0.Z, pi);
-            }
-            // Planes whose walls end toward the camera; their back walls also stop there.
-            wallBack = [];
-            foreach (var owner in edges.Values)
-            {
-                if (owner.Count != 1) continue;
-                int o = owner.Polygon * 3;
-                var a = triangles[o + owner.Edge];
-                if (!NativeWideWallNearEdge(a, triangles[o + (owner.Edge + 1) % 3], triangles[o + (owner.Edge + 2) % 3])
-                    || wallBack.ContainsKey(a.X)) continue;
-                float back = float.MaxValue;
-                foreach (int pi in xPlanes[a.X])
-                    for (int k = 0; k < 3; k++) back = Math.Min(back, triangles[pi * 3 + k].Z);
-                wallBack[a.X] = back;
             }
         }
 
@@ -410,42 +395,11 @@ public static partial class FramePacing
                 distance = 2400;
                 if (roofLeft || roofRight || canopy) direction = Math.Sign(a.X) * Vector3.UnitX;
             }
-            if (temple)
-            {
-                // Side walls end at the camera's 4:3 edge; continue their near
-                // contour toward the camera. Back walls behind them also stop at
-                // the wall plane; continue those outward. Coplanar faces beyond
-                // an edge mean a window or doorway, which must stay open. The
-                // bridge front below the first shaft's right wall also stops short.
-                distance = 3200;
-                float yLow = Math.Min(a.Y, b.Y), yHigh = Math.Max(a.Y, b.Y);
-                bool bridge = sunset && a.X == 6800 && b.X == 6800 && a.Z == 6000 && b.Z == 6000
-                    && c.Z == 6000 && yHigh <= 0;
-                if (bridge) direction = Vector3.UnitX;
-                else if (NativeWideWallNearEdge(a, b, c))
-                {
-                    if (a.Z == b.Z && NativeWidePlaneContinues(triangles, xPlanes![a.X], 2, a.Z, 1,
-                        yLow, yHigh, distance)) continue;
-                    direction = Vector3.UnitZ;
-                }
-                else if (a.X == b.X && a.Z == b.Z && b.Z == c.Z
-                    && wallBack!.TryGetValue(a.X, out float back) && a.Z <= back + 16)
-                {
-                    float sign = Math.Sign(a.X - c.X);
-                    if (sign == 0 || NativeWidePlaneContinues(triangles, zPlanes![a.Z], 0, a.X, sign,
-                        yLow, yHigh, distance)) continue;
-                    direction = sign * Vector3.UnitX;
-                }
-                else continue;
-            }
             if (!TryNativeWideMaterial(m, world, owner.Polygon, 0, out _, out _,
                 out short u0, out short v0, out short u1, out short v1, out short u2, out short v2)) continue;
             Vector2[] uv = [new(u0, v0), new(u1, v1), new(u2, v2)];
-            int added = repairs.Count;
             AddNativeWideSceneryStrip(repairs, owner.Polygon, a, b, c,
                 uv[owner.Edge], uv[(owner.Edge + 1) % 3], uv[(owner.Edge + 2) % 3], direction, endDirection, distance);
-            if (a.X == outerWall && b.X == outerWall && a.Z == 6000 && b.Z == 6000 && direction == Vector3.UnitZ)
-                for (int i = added; i < repairs.Count; i++) repairs[i] = repairs[i] with { Boundary = true };
         }
         if (hog)
         {
@@ -1161,10 +1115,10 @@ public static partial class FramePacing
             or (81600, -42400, 3144, 2845) or (103600, -41600, 2250, 2011) or (142400, -41600, 2143, 1968)
             or (158400, -38423, 2805, 2238) or (151235, -16761, 3259, 2860) or (175200, -16600, 2113, 2038);
 
-    // The temple's generic wall continuation cannot tell a level boundary from a
-    // wall that ends inside an open room. Draw it behind all real scenery so it
-    // only fills pixels nothing else covers. Depth is 1 - 64/Z; the remap keeps
-    // the additions' own order but places them beyond the loaded rooms.
+    // A wall continuation cannot tell a level boundary from a wall that ends
+    // inside an open room. Draw it behind all real scenery so it only fills
+    // pixels nothing else covers. Depth is 1 - 64/Z; the remap keeps the
+    // additions' own order but places them beyond the loaded rooms.
     static void NativeWideBehindScenery(List<NativeWideTriangle> triangles, int start)
     {
         static HleVertex Far(HleVertex v)
@@ -1179,44 +1133,11 @@ public static partial class FramePacing
         }
     }
 
-    static void AddNativeWidePlane(Dictionary<float, List<int>> planes, float plane, int polygon)
-    {
-        if (!planes.TryGetValue(plane, out var list)) planes[plane] = list = [];
-        list.Add(polygon);
-    }
-
-    // Open edge of a face lying in an X plane whose surface ends toward the camera (+Z).
-    static bool NativeWideWallNearEdge(NativeWideClipVertex a, NativeWideClipVertex b, NativeWideClipVertex c) =>
-        a.X == b.X && b.X == c.X && NativeWideNearEdge(a, b, c);
-
-    // Edge a-b of triangle abc whose surface ends toward the camera (+Z).
-    static bool NativeWideNearEdge(NativeWideClipVertex a, NativeWideClipVertex b, NativeWideClipVertex c) =>
-        NativeWideOutward(a, b, c).Z > 1;
-
     // From edge a-b of triangle abc away from c, perpendicular to the edge.
     static Vector3 NativeWideOutward(NativeWideClipVertex a, NativeWideClipVertex b, NativeWideClipVertex c)
     {
         Vector3 pa = Position(a), edge = Position(b) - pa, outward = pa - Position(c);
         return outward - edge * (Vector3.Dot(outward, edge) / Vector3.Dot(edge, edge));
-    }
-
-    // True when another face in the same plane lies beyond the edge (axis 0 = X,
-    // 2 = Z) within the extension distance and overlaps its height.
-    static bool NativeWidePlaneContinues(NativeWideClipVertex[] triangles, List<int> plane, int axis,
-        float start, float sign, float yLow, float yHigh, float distance)
-    {
-        foreach (int pi in plane)
-        {
-            var t0 = triangles[pi * 3]; var t1 = triangles[pi * 3 + 1]; var t2 = triangles[pi * 3 + 2];
-            if (Math.Min(yHigh, Math.Max(t0.Y, Math.Max(t1.Y, t2.Y)))
-                - Math.Max(yLow, Math.Min(t0.Y, Math.Min(t1.Y, t2.Y))) <= 0) continue;
-            float d0 = ((axis == 0 ? t0.X : t0.Z) - start) * sign;
-            float d1 = ((axis == 0 ? t1.X : t1.Z) - start) * sign;
-            float d2 = ((axis == 0 ? t2.X : t2.Z) - start) * sign;
-            float near = Math.Min(d0, Math.Min(d1, d2));
-            if (near >= 0 && Math.Max(d0, Math.Max(d1, d2)) > 0 && near < distance) return true;
-        }
-        return false;
     }
 
     static Vector3 Position(NativeWideClipVertex v) => new((float)v.X, (float)v.Y, (float)v.Z);

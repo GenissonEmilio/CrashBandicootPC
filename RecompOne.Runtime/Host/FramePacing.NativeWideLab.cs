@@ -273,9 +273,10 @@ public static partial class FramePacing
     // cells, at least MinBlock long, moved by their length, until Extend past
     // the end or a face of the same plane is in the way. Only planes at least
     // MinHeight tall across their rows, and rows whose whole cells span
-    // MinLength, take part. Copies never overlap faces or each other.
+    // MinLength, take part. A run shorter than MinBlock but at least MinRun
+    // long continues as a whole. Copies never overlap faces or each other.
     readonly record struct NativeWideRows(int Normal, int U, bool Low, bool High, float Extend, float MinBlock,
-        float MinHeight, float MinLength);
+        float MinHeight, float MinLength, float MinRun = float.PositiveInfinity);
 
     static float NativeWideAxis(NativeWideClipVertex v, int axis) => axis == 0 ? v.X : axis == 1 ? v.Y : v.Z;
 
@@ -352,7 +353,7 @@ public static partial class FramePacing
                             block.Add(run[side > 0 ? run.Count - 1 - i : i]);
                             length += block[^1].U1 - block[^1].U0;
                         }
-                        if (length < spec.MinBlock) continue;
+                        if (length < spec.MinBlock && length < spec.MinRun) continue;
                         // Copies move by the block's length; cells go in from the one
                         // landing next to the end, until a face is in the way.
                         var order = side > 0 ? block.OrderBy(e => e.U0).ToList() : [.. block.OrderByDescending(e => e.U0)];
