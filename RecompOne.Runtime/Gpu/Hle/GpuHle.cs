@@ -75,6 +75,9 @@ public static class GpuHle
     /// <summary>Force nearest filtering on the present texture (crisp pixels when upscaled).</summary>
     public static bool PresentNearest { get; set; }
 
+    /// <summary>MattiasCRT output filter (<see cref="GlCrt"/>), applied after presentation.</summary>
+    public static bool CrtFilter { get; set; }
+
     /// <summary>Prefer whole-scanline scaling without introducing extra letterboxing.</summary>
     public static bool IntegerScale { get; set; }
 

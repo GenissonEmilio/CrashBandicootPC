@@ -21,7 +21,7 @@ This isn't an emulator. The original PS1 code is **statically recompiled** into 
 - **Native widescreen (16:9).** Nothing is stretched: the game draws more of the world on both sides of the screen, with the same camera. The HUD moves out to the new screen edges.
 - **High frame rate.** 60, 120, 240 FPS or uncapped. Each object keeps its original speed, so the game plays as it did on a PS1, only smoother. You can switch frame rate in game with hotkeys.
 - **High resolution.** Internal resolution from native up to **8x (4K)**.
-- **Image options.** Bilinear, sharp bilinear and soft smooth texture filters, plus **dedither** and **dejitter** to remove the PS1 dithering and wobbly polygons.
+- **Image options.** Bilinear, sharp bilinear and soft smooth texture filters, plus **dedither** and **dejitter** to remove the PS1 dithering and wobbly polygons, and an optional **CRT filter** (MattiasCRT) for the old TV look.
 - **Cheats.** Infinite lives, level select, god mode and **fly mode**.
 - **Mods.** Drop C# mods, texture packs and asset overlays into `mods/` and switch them on or off from the launcher. See the [modding guide](docs/MODDING.md).
 - **Controllers and keyboard.** Gamepad support and rebindable keys.
@@ -146,6 +146,7 @@ This project stands on the shoulders of some amazing people.
 Also thanks to:
 
 - [CHDSharp](https://github.com/purelogiccode/CHDSharp) by Peterson Fernandes ([@purelogiccode](https://github.com/purelogiccode)) and Gordon Jefferyes ([@gjefferyes](https://github.com/gjefferyes)), for CHD support. See the [third-party notices](THIRD-PARTY-NOTICES.txt).
+- [CRT View](https://github.com/mattiasgustavsson/crtview) by Mattias Gustavsson, whose crtemu shader is the optional MattiasCRT filter (MIT).
 - The static recompilation community (N64Recomp and friends), for showing it could be done.
 - **Naughty Dog**, for making the game we're all still playing almost 30 years later.
 

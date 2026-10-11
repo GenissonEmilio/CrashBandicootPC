@@ -81,7 +81,26 @@ internal sealed class OutputPanel : IPanel
         var imageSize = FitAspect(avail, ConfigManager.View.IntegerScale);
         var offset = (avail - imageSize) * 0.5f;
         ImGui.SetCursorPos(ImGui.GetCursorPos() + offset);
-        ImGui.Image((nint)_texId, imageSize);
+        uint tex = _texId;
+        if (Hle.GpuHle.CrtFilter && Hle.GpuHle.Backend is Hle.GlBackend gl && _texId == gl.PresentTexture)
+            tex = CrtTexture(gl, ref imageSize);
+        ImGui.Image((nint)tex, imageSize);
+    }
+
+    static uint CrtTexture(Hle.GlBackend gl, ref Vector2 imageSize)
+    {
+        // The shadow mask needs one shader pixel per screen pixel: snap the image
+        // to whole framebuffer pixels and filter at exactly that size.
+        var scale = ImGui.GetIO().DisplayFramebufferScale;
+        if (scale.X <= 0f || scale.Y <= 0f) scale = Vector2.One;
+        int width = Math.Max(1, (int)MathF.Round(imageSize.X * scale.X));
+        int height = Math.Max(1, (int)MathF.Round(imageSize.Y * scale.Y));
+        var pos = ImGui.GetCursorScreenPos() * scale;
+        ImGui.SetCursorScreenPos(new Vector2(MathF.Round(pos.X) / scale.X, MathF.Round(pos.Y) / scale.Y));
+        uint tex = gl.RenderCrt(width, height);
+        if (tex == 0) return _texId;
+        imageSize = new Vector2(width / scale.X, height / scale.Y);
+        return tex;
     }
 
     static Vector2 FitAspect(Vector2 dst, bool integerScale)

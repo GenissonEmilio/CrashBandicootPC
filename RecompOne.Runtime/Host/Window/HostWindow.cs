@@ -605,6 +605,7 @@ internal static class HostWindow
         Hle.GpuHle.Dedither = ConfigManager.View.Dedither;
         Hle.GpuHle.Dejitter = ConfigManager.View.Dejitter;
         Hle.GpuHle.PresentNearest = ConfigManager.View.PresentNearest;
+        Hle.GpuHle.CrtFilter = ConfigManager.View.CrtFilter;
         ApplyWidescreen(ConfigManager.View.Widescreen);
         ApplyVSync(ConfigManager.View.VSync);
 

@@ -96,6 +96,7 @@ public sealed class NativeLauncherUi : UserControl, ILauncherUi
     Label? _filterStrengthLabel;
     ThemeCheck? _dedither;
     ThemeCheck? _dejitter;
+    ThemeCheck? _crtFilter;
     ThemeCheck? _saveLives;
     ThemeCheck? _cheatLives;
     ThemeCheck? _cheatLevel;
@@ -290,6 +291,7 @@ public sealed class NativeLauncherUi : UserControl, ILauncherUi
             _filterStrength.Value = Math.Clamp((int)Math.Round(strength * 100), 0, 100);
         SetCheck(_dedither, state, "dedither");
         SetCheck(_dejitter, state, "dejitter");
+        SetCheck(_crtFilter, state, "crtFilter");
         SetCheck(_saveLives, state, "saveLives");
         SetCheck(_cheatLives, state, "infiniteLives");
         SetCheck(_cheatLevel, state, "levelSelect");
@@ -1473,6 +1475,12 @@ public sealed class NativeLauncherUi : UserControl, ILauncherUi
         y += 52;
         AddHint("Texture filters auto-off on menus & cutscenes. Dedither and dejitter apply everywhere.");
 
+        _crtFilter = MakeCheck("CRT filter (MattiasCRT)");
+        _crtFilter.Location = new Point(12, y);
+        list.Controls.Add(_crtFilter);
+        y += 52;
+        AddHint("Curved CRT TV look by Mattias Gustavsson: scanlines, glow, and a shadow mask.");
+
         _saveLives = MakeCheck("Save lives to memory card");
         _saveLives.Location = new Point(12, y);
         _saveLives.Checked = true;
@@ -1498,6 +1506,7 @@ public sealed class NativeLauncherUi : UserControl, ILauncherUi
                 textureFilterStrength = (_filterStrength?.Value ?? 50) / 100.0,
                 dedither = _dedither?.Checked ?? false,
                 dejitter = _dejitter?.Checked ?? false,
+                crtFilter = _crtFilter?.Checked ?? false,
                 saveLives = _saveLives?.Checked ?? true,
             });
             CloseSheet();

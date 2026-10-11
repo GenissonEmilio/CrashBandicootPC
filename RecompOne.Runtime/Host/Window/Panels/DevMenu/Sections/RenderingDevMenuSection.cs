@@ -86,6 +86,15 @@ internal sealed class RenderingDevMenuSection : IDevMenuSection
         }
         ImGuiEx.TextDisabled("No blurry upscale");
 
+        bool crt = ConfigManager.View.CrtFilter;
+        if (ImGui.Checkbox("CRT filter (MattiasCRT)", ref crt))
+        {
+            ConfigManager.View.CrtFilter = crt;
+            Hle.GpuHle.CrtFilter = crt;
+            ConfigManager.SaveView(PanelManager.Panels);
+        }
+        ImGuiEx.TextDisabled("Curved CRT TV look");
+
         bool vsync = ConfigManager.View.VSync;
         if (ImGui.Checkbox("VSync", ref vsync))
         {

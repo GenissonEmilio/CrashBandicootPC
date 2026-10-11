@@ -30,7 +30,10 @@ public sealed class GlBackend : IGpuBackend
     uint _vao, _vbo, _presentVao, _presentVbo, _progPrim, _progPrimFast, _progPresent, _progPresent24;
     uint _presentFbo, _presentTex;
     int _presentW, _presentH, _presentNativeH;
+    float _presentAspect = GpuHle.BaseAspect;
     bool _presentNearest;
+    GlCrt? _crt;
+    bool _crtFailed;
     bool _gles;
     GlesFramebufferFetchPath _glesFramebufferFetchPath;
     TextureBarrierProc? _glesTextureBarrier;
@@ -1107,6 +1110,7 @@ public sealed class GlBackend : IGpuBackend
         int h1x = h;
         float aspect = showWide ? GpuHle.WideAspect : GpuHle.OutputAspect;
         _presentNativeH = h1x;
+        _presentAspect = aspect;
 
         int presentScale = GlVram.Scale;
         int fbW = w1x * presentScale;
@@ -1220,6 +1224,40 @@ public sealed class GlBackend : IGpuBackend
         _presentW = w; _presentH = h; _presentNearest = nearest;
     }
 
+    /// <summary>The texture <see cref="PresentDisplay"/> renders into.</summary>
+    public uint PresentTexture => _presentTex;
+
+    GlCrt? Crt()
+    {
+        if (_crt == null && !_crtFailed)
+        {
+            // Built on first use so players who never enable the filter pay nothing.
+            var crt = new GlCrt(_gl, _presentVao, _gles);
+            if (crt.Init()) _crt = crt;
+            else
+            {
+                crt.Dispose();
+                _crtFailed = true;
+                LastDiagnostic = "crt: shader build failed";
+            }
+        }
+        return _crt;
+    }
+
+    /// <summary>
+    /// Run the CRT filter over the last presented frame into a texture of exactly
+    /// <paramref name="width"/>×<paramref name="height"/> screen pixels (desktop
+    /// output panel). Returns 0 when the filter is unavailable.
+    /// </summary>
+    public uint RenderCrt(int width, int height)
+    {
+        if (!Ready || _presentW <= 0 || _presentH <= 0 || width <= 0 || height <= 0 || Crt() is not { } crt)
+            return 0;
+        uint tex = crt.RenderToTexture(_presentTex, _presentNearest, _presentNativeH, _presentAspect, width, height);
+        _gl.BindFramebuffer(FramebufferTarget.Framebuffer, 0);
+        return tex;
+    }
+
     /// <summary>
     /// Read the high-resolution present target into Android-compatible ARGB pixels.
     /// OpenGL's bottom-left origin is flipped here so callers can upload the result
@@ -1287,6 +1325,14 @@ public sealed class GlBackend : IGpuBackend
         int targetX = (surfaceWidth - targetWidth) / 2;
         int targetY = (surfaceHeight - targetHeight) / 2;
 
+        // The window surface is bottom-up, which matches crtemu's own orientation.
+        if (GpuHle.CrtFilter && Crt() is { } crt)
+        {
+            crt.Render(_presentTex, _presentNearest, _presentNativeH, aspect,
+                0, targetX, targetY, targetWidth, targetHeight, flipY: false);
+            return;
+        }
+
         _gl.Viewport(targetX, targetY, (uint)targetWidth, (uint)targetHeight);
 
         _gl.UseProgram(_progPresent);
@@ -1311,6 +1357,7 @@ public sealed class GlBackend : IGpuBackend
     public void Dispose()
     {
         foreach (var rt in _rts) rt?.Destroy(_gl);
+        _crt?.Dispose();
         _vram.Dispose();
         if (_vbo != 0) _gl.DeleteBuffer(_vbo);
         if (_presentVbo != 0) _gl.DeleteBuffer(_presentVbo);

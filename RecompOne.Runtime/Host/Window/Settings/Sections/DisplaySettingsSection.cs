@@ -67,6 +67,15 @@ internal sealed class DisplaySettingsSection : ISettingsSection
             ConfigManager.SaveView(PanelManager.Panels);
         }
 
+        bool crt = ConfigManager.View.CrtFilter;
+        if (ImGui.Checkbox("CRT filter (MattiasCRT)", ref crt))
+        {
+            ConfigManager.View.CrtFilter = crt;
+            Hle.GpuHle.CrtFilter = crt;
+            ConfigManager.SaveView(PanelManager.Panels);
+        }
+        ImGui.TextDisabled("Curved CRT TV look by Mattias Gustavsson");
+
         bool vsync = ConfigManager.View.VSync;
         if (ImGui.Checkbox("VSync", ref vsync))
         {

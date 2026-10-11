@@ -221,6 +221,7 @@ public sealed class LauncherHost : Form
             textureFilterStrength = ConfigManager.View.TextureFilterStrength,
             dedither = ConfigManager.View.Dedither,
             dejitter = ConfigManager.View.Dejitter,
+            crtFilter = ConfigManager.View.CrtFilter,
             saveLives = ConfigManager.View.SaveLives,
             infiniteLives = CheatConfig.InfiniteLives,
             levelSelect = CheatConfig.LevelSelect,
@@ -667,6 +668,8 @@ public sealed class LauncherHost : Form
             ConfigManager.View.Dedither = dd.GetBoolean();
         if (root.TryGetProperty("dejitter", out var dj))
             ConfigManager.View.Dejitter = dj.GetBoolean();
+        if (root.TryGetProperty("crtFilter", out var crt))
+            ConfigManager.View.CrtFilter = crt.GetBoolean();
         if (root.TryGetProperty("saveLives", out var sl))
             ConfigManager.View.SaveLives = sl.GetBoolean();
 

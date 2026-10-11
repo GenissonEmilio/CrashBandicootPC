@@ -396,6 +396,11 @@ sealed partial class DevMenuOverlay : FrameLayout
             view.PresentNearest = value;
             AndroidGraphics.ApplyLive();
         }, "No blurry upscale.");
+        Toggle("CRT filter (MattiasCRT)", view.CrtFilter, value =>
+        {
+            view.CrtFilter = value;
+            AndroidGraphics.ApplyLive();
+        }, "Curved CRT TV look by Mattias Gustavsson.");
         Toggle("VSync", view.VSync, value =>
         {
             view.VSync = value;

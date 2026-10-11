@@ -194,6 +194,16 @@ public class ViewConfig
         set => SetBool("PresentNearest", value);
     }
 
+    /// <summary>
+    /// MattiasCRT output filter (#131): curved CRT TV look by Mattias Gustavsson, with
+    /// scanlines, glow and a shadow mask. Off by default.
+    /// </summary>
+    public bool CrtFilter
+    {
+        get => GetBool("CrtFilter");
+        set => SetBool("CrtFilter", value);
+    }
+
     /// <summary>Host swap-interval VSync (reduces tearing; may add input latency).</summary>
     public bool VSync
     {
