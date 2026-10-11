@@ -52,8 +52,8 @@ public sealed class GlBackend : IGpuBackend
     WidePrimitiveMode _kWideMode;
     int _kTwAndX, _kTwAndY, _kTwOrX, _kTwOrY;
     int _kClipX0, _kClipY0, _kClipX1, _kClipY1;
-    int _uTexWindow, _uBlend, _uBlendOpaque, _uSetMask, _uCheckMask, _uPosBias, _uFbInv, _uFilterMode, _uFilterStrength, _uDedither, _uWideMode, _uWideCore;
-    int _ufTexWindow, _ufBlendOpaque, _ufSetMask, _ufCheckMask, _ufPosBias, _ufFbInv, _ufFilterMode, _ufFilterStrength, _ufDedither, _ufWideMode, _ufWideCore;
+    int _uTexWindow, _uBlend, _uBlendOpaque, _uSetMask, _uCheckMask, _uPosBias, _uFbInv, _uFilterMode, _uFilterStrength, _uDedither, _uScaledDither, _uWideMode, _uWideCore;
+    int _ufTexWindow, _ufBlendOpaque, _ufSetMask, _ufCheckMask, _ufPosBias, _ufFbInv, _ufFilterMode, _ufFilterStrength, _ufDedither, _ufScaledDither, _ufWideMode, _ufWideCore;
     int _uPresentOrigin, _uPresentSize, _uPresentTexSize, _uPresent24Origin, _uPresent24Size;
 
     public bool Ready { get; private set; }
@@ -113,6 +113,7 @@ public sealed class GlBackend : IGpuBackend
         _uFilterMode = _gl.GetUniformLocation(_progPrim, "uFilterMode");
         _uFilterStrength = _gl.GetUniformLocation(_progPrim, "uFilterStrength");
         _uDedither = _gl.GetUniformLocation(_progPrim, "uDedither");
+        _uScaledDither = _gl.GetUniformLocation(_progPrim, "uScaledDither");
         _uWideMode = _gl.GetUniformLocation(_progPrim, "uWideMode");
         _uWideCore = _gl.GetUniformLocation(_progPrim, "uWideCore");
 
@@ -127,6 +128,7 @@ public sealed class GlBackend : IGpuBackend
         _gl.Uniform1(_uFilterMode, _gles && GlVram.Scale >= 8 ? 0 : GpuHle.EffectiveTextureFilter);
         _gl.Uniform1(_uFilterStrength, GpuHle.TextureFilterStrength);
         _gl.Uniform1(_uDedither, GpuHle.DeditherActive ? 1 : 0);
+        _gl.Uniform1(_uScaledDither, GpuHle.ScaledDither ? 1 : 0);
 
         if (_progPrimFast != 0)
         {
@@ -139,6 +141,7 @@ public sealed class GlBackend : IGpuBackend
             _ufFilterMode = _gl.GetUniformLocation(_progPrimFast, "uFilterMode");
             _ufFilterStrength = _gl.GetUniformLocation(_progPrimFast, "uFilterStrength");
             _ufDedither = _gl.GetUniformLocation(_progPrimFast, "uDedither");
+            _ufScaledDither = _gl.GetUniformLocation(_progPrimFast, "uScaledDither");
             _ufWideMode = _gl.GetUniformLocation(_progPrimFast, "uWideMode");
             _ufWideCore = _gl.GetUniformLocation(_progPrimFast, "uWideCore");
 
@@ -149,6 +152,7 @@ public sealed class GlBackend : IGpuBackend
             _gl.Uniform1(_ufFilterMode, _gles && GlVram.Scale >= 8 ? 0 : GpuHle.EffectiveTextureFilter);
             _gl.Uniform1(_ufFilterStrength, GpuHle.TextureFilterStrength);
             _gl.Uniform1(_ufDedither, GpuHle.DeditherActive ? 1 : 0);
+            _gl.Uniform1(_ufScaledDither, GpuHle.ScaledDither ? 1 : 0);
         }
 
         _uPresentOrigin = _gl.GetUniformLocation(_progPresent, "uOrigin");
@@ -765,6 +769,7 @@ public sealed class GlBackend : IGpuBackend
         int uFilterMode = fast ? _ufFilterMode : _uFilterMode;
         int uFilterStrength = fast ? _ufFilterStrength : _uFilterStrength;
         int uDedither = fast ? _ufDedither : _uDedither;
+        int uScaledDither = fast ? _ufScaledDither : _uScaledDither;
         int uWideMode = fast ? _ufWideMode : _uWideMode;
         int uWideCore = fast ? _ufWideCore : _uWideCore;
 
@@ -796,6 +801,7 @@ public sealed class GlBackend : IGpuBackend
         _gl.Uniform1(uFilterMode, _gles && GlVram.Scale >= 8 ? 0 : GpuHle.EffectiveTextureFilter);
         _gl.Uniform1(uFilterStrength, GpuHle.TextureFilterStrength);
         _gl.Uniform1(uDedither, GpuHle.DeditherActive ? 1 : 0);
+        _gl.Uniform1(uScaledDither, GpuHle.ScaledDither ? 1 : 0);
         _gl.Uniform4(uBlendOpaque, 1f, 1f, 1f, 0f);
     }
 

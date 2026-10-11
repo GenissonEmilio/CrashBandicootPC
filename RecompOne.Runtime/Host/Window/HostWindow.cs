@@ -603,6 +603,7 @@ internal static class HostWindow
         Hle.GpuHle.TextureFilter = ConfigManager.View.TextureFilter;
         Hle.GpuHle.TextureFilterStrength = ConfigManager.View.TextureFilterStrength;
         Hle.GpuHle.Dedither = ConfigManager.View.Dedither;
+        Hle.GpuHle.ScaledDither = ConfigManager.View.ScaledDither;
         Hle.GpuHle.Dejitter = ConfigManager.View.Dejitter;
         Hle.GpuHle.PresentNearest = ConfigManager.View.PresentNearest;
         Hle.GpuHle.CrtFilter = ConfigManager.View.CrtFilter;

@@ -69,6 +69,9 @@ public static class GpuHle
     public static bool Dedither { get; set; }
     public static bool Dejitter { get; set; }
 
+    /// <summary>Dither cell = one PS1 pixel (true) or one internal pixel (false).</summary>
+    public static bool ScaledDither { get; set; } = true;
+
     /// <summary>Dev view: tint triangles dejitter could not place at subpixel precision.</summary>
     public static bool DejitterDebug { get; set; }
 

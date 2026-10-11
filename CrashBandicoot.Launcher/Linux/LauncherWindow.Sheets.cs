@@ -258,6 +258,7 @@ sealed partial class LauncherWindow
         var strength = Nav(new ThemeSlider { Value = (int)Math.Round(view.TextureFilterStrength * 100) });
         var dedither = Nav(new ThemeCheck("Dedither") { Checked = view.Dedither });
         var dejitter = Nav(new ThemeCheck("Dejitter") { Checked = view.Dejitter });
+        var scaledDither = Nav(new ThemeCheck("Scaled dither") { Checked = view.ScaledDither });
         var crtFilter = Nav(new ThemeCheck("CRT filter (MattiasCRT)") { Checked = view.CrtFilter });
         var saveLives = Nav(new ThemeCheck("Save lives to memory card") { Checked = view.SaveLives });
 
@@ -284,6 +285,8 @@ sealed partial class LauncherWindow
                 WithMargin(dedither, new Thickness(0, 0, 0, 22)),
                 WithMargin(dejitter, new Thickness(0, 0, 0, 14)),
                 Hint("Texture filters auto-off on menus & cutscenes. Dedither and dejitter apply everywhere."),
+                WithMargin(scaledDither, new Thickness(0, 0, 0, 14)),
+                Hint("Dither dots keep the PS1 pixel size at any internal resolution, like the original. Off: finer dots above 1x. No effect with Dedither."),
                 WithMargin(crtFilter, new Thickness(0, 0, 0, 14)),
                 Hint("Curved CRT TV look by Mattias Gustavsson: scanlines, glow, and a shadow mask."),
                 WithMargin(saveLives, new Thickness(0, 0, 0, 14)),
@@ -304,6 +307,7 @@ sealed partial class LauncherWindow
             view.TextureFilterStrength = strength.Value / 100f;
             view.Dedither = dedither.Checked;
             view.Dejitter = dejitter.Checked;
+            view.ScaledDither = scaledDither.Checked;
             view.CrtFilter = crtFilter.Checked;
             view.SaveLives = saveLives.Checked;
             ConfigManager.SaveGame();

@@ -220,6 +220,7 @@ public sealed class LauncherHost : Form
             textureFilter = ConfigManager.View.TextureFilter,
             textureFilterStrength = ConfigManager.View.TextureFilterStrength,
             dedither = ConfigManager.View.Dedither,
+            scaledDither = ConfigManager.View.ScaledDither,
             dejitter = ConfigManager.View.Dejitter,
             crtFilter = ConfigManager.View.CrtFilter,
             saveLives = ConfigManager.View.SaveLives,
@@ -666,6 +667,8 @@ public sealed class LauncherHost : Form
             ConfigManager.View.TextureFilterStrength = strength;
         if (root.TryGetProperty("dedither", out var dd))
             ConfigManager.View.Dedither = dd.GetBoolean();
+        if (root.TryGetProperty("scaledDither", out var sd))
+            ConfigManager.View.ScaledDither = sd.GetBoolean();
         if (root.TryGetProperty("dejitter", out var dj))
             ConfigManager.View.Dejitter = dj.GetBoolean();
         if (root.TryGetProperty("crtFilter", out var crt))

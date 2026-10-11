@@ -163,6 +163,17 @@ public class ViewConfig
         set => SetBool("Dedither", value);
     }
 
+    /// <summary>
+    /// Dither pattern sized to PS1 pixels at any internal resolution (original look, #119).
+    /// Off: the pattern runs per internal pixel, finer above 1x. No effect with Dedither.
+    /// On by default.
+    /// </summary>
+    public bool ScaledDither
+    {
+        get => GetBool("ScaledDither", true);
+        set => SetBool("ScaledDither", value);
+    }
+
     /// <summary>Keep GTE subpixel screen coords to reduce polygon wobble. Off on menus &amp; cutscenes.</summary>
     public bool Dejitter
     {

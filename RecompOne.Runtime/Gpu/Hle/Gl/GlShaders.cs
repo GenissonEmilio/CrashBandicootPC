@@ -160,6 +160,7 @@ internal static class GlShaders
         uniform int   uFilterMode;
         uniform float uFilterStrength;
         uniform int   uDedither;
+        uniform int   uScaledDither;
         uniform vec2  uPosBias;
         uniform int   uWideMode;
         uniform vec2  uWideCore;
@@ -183,7 +184,11 @@ internal static class GlShaders
             if (uDedither != 0)
                 return clamp(vec3(c8), 0.0, 255.0) / 255.0;
             if (vDither != 0) {
-                ivec2 vp = ivec2(floor(gl_FragCoord.xy / float(uScale) - uPosBias));
+                // Scaled: one dither cell per PS1 pixel, as on hardware.
+                // Unscaled: one per internal pixel, finer above 1x.
+                ivec2 vp = uScaledDither != 0
+                    ? ivec2(floor(gl_FragCoord.xy / float(uScale) - uPosBias))
+                    : ivec2(floor(gl_FragCoord.xy - uPosBias * float(uScale)));
                 c8 = clamp(c8 + ditherTbl[(vp.y & 3) * 4 + (vp.x & 3)], 0, 255);
             }
             return vec3(min(c8 >> 3, 31)) / 31.0;

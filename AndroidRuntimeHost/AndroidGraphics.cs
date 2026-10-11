@@ -61,6 +61,7 @@ static class AndroidGraphics
         GpuHle.TextureFilter = view.TextureFilter;
         GpuHle.TextureFilterStrength = view.TextureFilterStrength;
         GpuHle.Dedither = view.Dedither;
+        GpuHle.ScaledDither = view.ScaledDither;
         GpuHle.Dejitter = view.Dejitter;
         GpuHle.PresentNearest = view.PresentNearest;
         GpuHle.CrtFilter = view.CrtFilter;
