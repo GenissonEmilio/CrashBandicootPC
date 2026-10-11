@@ -5,14 +5,14 @@ namespace RecompOne.Runtime.Host;
 
 public static partial class FramePacing
 {
-    // Jungle Rollers (level 12) has no sky: every mesh is ground, banks, trunks
-    // and plants cut along the 4:3 view (the retail draw lists keep only what
-    // the 4:3 camera sees), and the 16:9 view saw black past every cut. Open
-    // edges are continued outward in the plane of their own face, with the
-    // face's texture, as a skirt. Edges of small pieces (plants, leaves, props)
-    // are left alone: their continuation would be a stretched leaf. The skirt
-    // is drawn behind all real scenery, in its own depth order, so it only
-    // covers what nothing else does.
+    // Jungle Rollers (level 12) and Upstream (level 15) have no sky: every mesh
+    // is ground, banks, trunks and plants cut along the 4:3 view (the retail
+    // draw lists keep only what the 4:3 camera sees), and the 16:9 view saw
+    // black past every cut. Open edges are continued outward in the plane of
+    // their own face, with the face's texture, as a skirt. Edges of small
+    // pieces (plants, leaves, props) are left alone: their continuation would
+    // be a stretched leaf. The skirt is drawn behind all real scenery, in its
+    // own depth order, so it only covers what nothing else does.
     //
     // Most open edges lie where the 16:9 view never looks or where real
     // scenery always stands in front, and a skirt on each of them (some 600
@@ -23,7 +23,7 @@ public static partial class FramePacing
     const int NativeWideSkirtMinPiece = 20;
     static readonly Dictionary<NativeWideSceneryKey, List<NativeWideRepair>> _nativeWideSkirts = [];
 
-    // Skirted polygons per mesh, by header X and Z.
+    // Jungle Rollers' skirted polygons per mesh, by header X and Z.
     static readonly Dictionary<(int X, int Z), int[]> NativeWideJungleSkirts = new()
     {
         // 0a_cW
@@ -148,31 +148,157 @@ public static partial class FramePacing
         ],
     };
 
+    // Upstream's skirted polygons, selected the same way. River water over
+    // black is not a hole there: the 4:3 view shows the same river over black.
+    // Water over black at the waterfalls and their top pools is.
+    static readonly Dictionary<(int X, int Z), int[]> NativeWideUpstreamSkirts = new()
+    {
+        // 0d_fW
+        [(8197, 100003)] =
+        [
+            5, 9, 17, 30, 71, 72, 73, 75, 190, 255, 257, 258, 297, 331, 335, 349, 353, 386, 387, 388, 397, 422,
+            424, 425
+        ],
+        // 0e_fW
+        [(8197, 91739)] =
+        [
+            0, 1, 103, 104, 105, 106, 110, 112, 114, 127, 131, 145, 146, 181, 185, 187, 194, 227, 234, 240,
+            270, 299, 300, 666, 698, 699, 724, 730, 731, 732, 733, 876, 881, 922, 943, 1017, 1073, 1078, 1081,
+            1084, 1092, 1122, 1133, 1190, 1195, 1198, 1201, 1209, 1245, 1368, 1373, 1390, 1558, 1564, 1571,
+            1577
+        ],
+        // 0f_fW
+        [(8198, 82687)] =
+        [
+            24, 88, 89, 90, 92, 97, 99, 100, 142, 220, 224, 229, 232, 246, 261, 299, 308, 336, 341, 349, 350,
+            351, 515, 518, 542, 578, 583, 591, 593, 751, 752, 898, 903, 906, 909, 917, 946, 957, 1014, 1019,
+            1022, 1025, 1033, 1062, 1084, 1252, 1265, 1273, 1274
+        ],
+        // 0g_fW
+        [(8197, 73521)] =
+        [
+            5, 10, 18, 59, 60, 77, 78, 81, 82, 84, 86, 93, 94, 225, 227, 356, 415, 590, 659, 660, 661, 764,
+            765, 771, 782, 788, 828, 834, 865, 894, 1236, 1240, 1296, 1355, 1414, 1416, 1426, 1483, 1540, 1546,
+            1550, 1553, 1559, 1594, 1653, 1825
+        ],
+        // 0h_fW
+        [(8197, 64476)] =
+        [
+            10, 11, 16, 35, 39, 41, 81, 161, 162, 163, 165, 170, 173, 290, 291, 295, 396, 401, 403, 434, 464,
+            476, 502, 507, 511, 515, 516, 529, 666, 687, 744, 755, 860, 929, 931, 932, 1262, 1265, 1273, 1306,
+            1337, 1339, 1356, 1479, 1500
+        ],
+        // 0i_fW
+        [(8197, 55697)] =
+        [
+            10, 14, 16, 50, 56, 78, 87, 94, 95, 235, 372, 451, 452, 453, 455, 460, 463, 496, 539, 597, 602,
+            632, 846, 1005, 1069, 1073, 1076, 1129, 1157, 1161, 1294, 1306, 1362, 1364, 1367, 1370, 1373, 1381,
+            1411, 1413, 1418, 1420, 1438, 1440, 1442, 1470, 1492, 1494
+        ],
+        // 0j_fW
+        [(8080, 46423)] =
+        [
+            29, 31, 43, 77, 88, 112, 113, 120, 124, 139, 306, 307, 323, 690, 695, 703, 704, 744, 745, 763, 766,
+            767, 771, 778, 779, 1171, 1183, 1228, 1246, 1247, 1283, 1287
+        ],
+        // 0k_fW
+        [(8197, 37530)] =
+        [
+            35, 114, 115, 116, 118, 123, 125, 126, 130, 138, 167, 223, 224, 229, 231, 232, 288, 290, 292, 293,
+            299, 307, 311, 313, 315, 316, 317, 391, 439, 440, 441, 442, 444, 445, 451, 452, 453, 462, 478, 485,
+            487, 491, 492, 500, 501, 503, 505, 693, 694, 704, 706, 762, 764, 767, 770, 773, 778, 815, 860, 863,
+            865, 868, 871, 904, 917, 922, 924, 1076, 1099, 1101
+        ],
+        // 0l_fW
+        [(8197, 28810)] =
+        [
+            15, 19, 21, 23, 25, 28, 59, 65, 87, 107, 109, 273, 276, 277, 281, 471, 484, 491, 501, 530, 531,
+            902, 903, 907, 923, 931, 1055, 1184, 1185, 1195, 1197, 1253, 1255, 1258, 1261, 1264, 1302, 1303,
+            1304, 1313, 1315, 1371, 1373, 1376, 1379, 1382, 1426, 1427, 1428, 1562
+        ],
+        // 0m_fW
+        [(8198, 21246)] =
+        [
+            15, 20, 63, 66, 67, 144, 155, 180, 384, 385, 389, 506, 507, 508, 539, 541, 547, 549, 605, 616, 718,
+            759, 789, 908, 909, 910, 920, 921, 922, 958, 960, 961, 983, 1034, 1162
+        ],
+        // 0n_fW
+        [(8197, 13652)] =
+        [
+            35, 110, 116, 123, 163, 169, 195, 221, 222, 572, 576, 584, 612, 618, 620, 621, 822, 889, 900, 958,
+            960, 963, 966, 969, 974, 1006, 1008, 1011, 1020, 1052, 1054, 1056, 1058, 1061, 1093, 1107, 1112,
+            1264, 1281, 1288
+        ],
+        // 0o_fW
+        [(8197, 4756)] =
+        [
+            10, 16, 18, 33, 56, 62, 93, 122, 306, 468, 490, 571, 572, 573, 574, 578, 580, 582, 592, 598, 604,
+            617, 622, 627, 631, 634, 672, 674, 676, 754, 775, 924, 928, 931, 937, 972, 979, 1205, 1216, 1274,
+            1276, 1279, 1282, 1285, 1323, 1339, 1486
+        ],
+        // 0p_fW
+        [(8197, -4074)] =
+        [
+            2, 6, 8, 38, 43, 45, 50, 51, 54, 69, 276, 419, 497, 499, 501, 509, 523, 538, 573, 575, 576, 577,
+            581, 584, 611, 612, 617, 623, 624, 625, 789, 801, 814, 815, 840, 844, 848, 849, 863, 1045, 1055,
+            1056, 1111, 1113, 1116, 1119, 1122, 1127, 1160, 1161, 1171, 1172, 1173, 1230, 1232, 1235, 1238,
+            1241, 1246, 1249, 1278, 1295, 1302, 1474, 1480, 1481
+        ],
+        // 0q_fW
+        [(8197, -12905)] =
+        [
+            40, 92, 93, 94, 96, 101, 104, 114, 140, 217, 218, 219, 220, 224, 226, 228, 239, 240, 255, 279, 290,
+            292, 293, 294, 298, 301, 334, 338, 342, 517, 541, 542, 796, 843, 845, 848, 851, 854, 862, 889, 899,
+            900, 955, 957, 960, 963, 966, 1003, 1027, 1224, 1225
+        ],
+        // 0r_fW
+        [(8197, -21736)] =
+        [
+            10, 14, 16, 52, 80, 99, 100, 401, 478, 482, 487, 490, 503, 507, 538, 588, 591, 595, 598, 603, 626,
+            631, 639, 640, 819, 959, 963, 966, 972, 1023, 1051, 1191, 1201, 1202, 1257, 1259, 1262, 1265, 1268,
+            1306, 1318, 1341
+        ],
+        // 0s_fW
+        [(8197, -31233)] =
+        [
+            237, 287, 289, 290, 309, 320, 579, 590, 794
+        ],
+    };
+
     static IReadOnlyList<NativeWideRepair> NativeWideSceneRepairs(IMemory m, NativeWideWorld world)
     {
         var repairs = NativeWideAssetRepairs(m, world);
         uint level = m.ReadU32(Catalogs.Catalog.LevelIdAddr);
-        if (level != 12) return repairs;
+        var skirts = level switch { 12 => NativeWideJungleSkirts, 15 => NativeWideUpstreamSkirts, _ => null };
+        if (skirts == null) return repairs;
         var key = new NativeWideSceneryKey(level, m.ReadU32(world.Header), m.ReadU32(world.Header + 4),
             m.ReadU32(world.Header + 8), world.PolyCount, world.VertexCount);
         if (_nativeWideSkirts.TryGetValue(key, out var cached)) return cached;
-        // The opening's hand-made bank and trunk strips keep their true depth.
+        // Jungle Rollers' hand-made opening bank and trunk strips keep their
+        // true depth. Upstream's opening bank strips overlap the retail bank
+        // they continue, so they stay behind the scenery like the skirts.
         var all = new List<NativeWideRepair>(repairs.Count);
-        foreach (var repair in repairs) all.Add(repair with { Boundary = true });
+        foreach (var repair in repairs) all.Add(repair with { Boundary = level == 12 });
         int authored = all.Count;
-        if (NativeWideJungleSkirts.TryGetValue(((int)m.ReadU32(world.Header), (int)m.ReadU32(world.Header + 8)),
+        if (skirts.TryGetValue(((int)m.ReadU32(world.Header), (int)m.ReadU32(world.Header + 8)),
                 out var skirted))
-            NativeWideSkirtRepairs(m, world, [.. skirted], all);
+            NativeWideSkirtRepairs(m, world, [.. skirted], all, river: level == 15);
         PaceLog($"native-wide level={level} skirt repairs={all.Count - authored}");
         return _nativeWideSkirts[key] = all;
     }
 
     // skirted: polygons whose open edges get a skirt (null: all of them).
+    // river (Upstream): polygons with animated water vertices are never
+    // continued: the river keeps its width, and a continued waterfall lip
+    // reads as a flat blue panel beside the bank. Neither are compact pieces
+    // (the tiki totems), whose cut sides would become long stretched stripes.
+    const float NativeWideSkirtMinExtent = 1500;
     static void NativeWideSkirtRepairs(IMemory m, NativeWideWorld world, HashSet<int>? skirted,
-        List<NativeWideRepair> output)
+        List<NativeWideRepair> output, bool river = false)
     {
         int count = world.PolyCount;
         var triangles = new NativeWideClipVertex[count * 3];
+        var water = new bool[count];
         var edges = new Dictionary<NativeWideEdge, NativeWideEdgeOwner>();
         // Pieces: polygons joined by shared edges (union-find).
         var piece = new int[count];
@@ -190,6 +316,9 @@ public static partial class FramePacing
             triangles[o] = ReadNativeWideLocal(m, world, a);
             triangles[o + 1] = ReadNativeWideLocal(m, world, b);
             triangles[o + 2] = ReadNativeWideLocal(m, world, c);
+            if (river)
+                water[pi] = ((FastU32(m, world.Vertices + (uint)a * 8 + 4) | FastU32(m, world.Vertices + (uint)b * 8 + 4)
+                    | FastU32(m, world.Vertices + (uint)c * 8 + 4)) & 1) != 0;
             for (int ei = 0; ei < 3; ei++)
             {
                 var edge = NativeWideEdgeKey(triangles[o + ei], triangles[o + (ei + 1) % 3]);
@@ -202,7 +331,20 @@ public static partial class FramePacing
             }
         }
         var pieceSize = new int[count];
-        for (int pi = 0; pi < count; pi++) pieceSize[Find(pi)]++;
+        var low = new Vector3[count];
+        var high = new Vector3[count];
+        Array.Fill(low, new Vector3(float.MaxValue));
+        Array.Fill(high, new Vector3(float.MinValue));
+        for (int pi = 0; pi < count; pi++)
+        {
+            int root = Find(pi);
+            pieceSize[root]++;
+            for (int k = 0; k < 3; k++)
+            {
+                low[root] = Vector3.Min(low[root], Position(triangles[pi * 3 + k]));
+                high[root] = Vector3.Max(high[root], Position(triangles[pi * 3 + k]));
+            }
+        }
 
         // Each open vertex moves along the mean of its open edges' outward
         // directions, so neighbouring strips share their outer corners.
@@ -212,7 +354,10 @@ public static partial class FramePacing
         var corner = new Dictionary<Vector3, Vector3>();
         foreach (var owner in edges.Values)
         {
-            if (owner.Count != 1 || pieceSize[Find(owner.Polygon)] < NativeWideSkirtMinPiece) continue;
+            int piece0 = Find(owner.Polygon);
+            if (owner.Count != 1 || water[owner.Polygon] || pieceSize[piece0] < NativeWideSkirtMinPiece) continue;
+            var extent = high[piece0] - low[piece0];
+            if (river && MathF.Max(extent.X, MathF.Max(extent.Y, extent.Z)) < NativeWideSkirtMinExtent) continue;
             int o = owner.Polygon * 3;
             var a = triangles[o + owner.Edge];
             var b = triangles[o + (owner.Edge + 1) % 3];
