@@ -446,6 +446,27 @@ public sealed class GlBackend : IGpuBackend
         _gl.BindFramebuffer(FramebufferTarget.Framebuffer, 0);
     }
 
+    // The game's own background fills cover the 4:3 frame only. Rows are VRAM
+    // rows of the current draw area's target.
+    public void FillWideBands(int y, int h, uint color)
+    {
+        Flush();
+        var rt = Classify();
+        if (rt == null || rt.Margin <= 0) return;
+        int top = Math.Clamp(y - rt.Y, 0, rt.H), bottom = Math.Clamp(y + h - rt.Y, 0, rt.H);
+        if (bottom <= top) return;
+        int s = GlVram.Scale;
+        _gl.BindFramebuffer(FramebufferTarget.Framebuffer, rt.Fbo);
+        _gl.ClearColor((color & 255) / 255f, ((color >> 8) & 255) / 255f, ((color >> 16) & 255) / 255f, 0f);
+        _gl.Enable(EnableCap.ScissorTest);
+        _gl.Scissor(0, top * s, (uint)(rt.Margin * s), (uint)((bottom - top) * s));
+        _gl.Clear(ClearBufferMask.ColorBufferBit);
+        _gl.Scissor((rt.Margin + rt.W) * s, top * s, (uint)(rt.Margin * s), (uint)((bottom - top) * s));
+        _gl.Clear(ClearBufferMask.ColorBufferBit);
+        _gl.Disable(EnableCap.ScissorTest);
+        _gl.BindFramebuffer(FramebufferTarget.Framebuffer, 0);
+    }
+
     const int FbSlackW = 64;
     const int FbSlackH = 32;
 

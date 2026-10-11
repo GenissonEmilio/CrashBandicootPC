@@ -52,6 +52,9 @@ public static partial class FramePacing
     static readonly int[] _nativeWideLighting = new int[8];
     static int _nativeWideFogFar, _nativeWideFogShift;
     static uint? _nativeWideFogBackground;
+    // The game's background fill of the top screen rows (colour, rows), when
+    // the side bands must show it too.
+    static (uint Color, int Rows)? _nativeWideSkyFill;
     static int _nativeWideOtFar;
     // Projection of this frame's side pass, for object additions made after it.
     readonly record struct NativeWideView(int Projection, int ScreenX, int ScreenY, int DrawX, int DrawY,
@@ -104,6 +107,7 @@ public static partial class FramePacing
         _nativeWidePending.Clear();
         _nativeWideCorePending.Clear();
         _nativeWideFogBackground = null;
+        _nativeWideSkyFill = null;
         _nativeWideView = null;
         GpuHle.NativeWideRendererActive = false;
         if (!GpuHle.WideFovActive)
@@ -171,6 +175,8 @@ public static partial class FramePacing
         uint? clearColor = GpuHle.DrawEnvClearsBackground ? null : 0u;
         if (GpuHle.NativeWideRendererActive && _nativeWideFogBackground is uint fogColor) clearColor = fogColor;
         backend.BeginWideDepth(clearColor);
+        if (GpuHle.NativeWideRendererActive && _nativeWideFogBackground == null && _nativeWideSkyFill is { } sky)
+            backend.FillWideBands(gpu.CurrentHleDrawEnv.ClipY0, sky.Rows, sky.Color);
         float dx = gpu.DrawOffsetX - _nativeWideDrawX;
         float dy = gpu.DrawOffsetY - _nativeWideDrawY;
         for (int i = 0; i < _nativeWidePending.Count; i++)
@@ -313,6 +319,9 @@ public static partial class FramePacing
             _nativeWideFogBackground = (uint)(Math.Clamp(_nativeWideFarColor[0] >> 4, 0, 255)
                 | Math.Clamp(_nativeWideFarColor[1] >> 4, 0, 255) << 8
                 | Math.Clamp(_nativeWideFarColor[2] >> 4, 0, 255) << 16);
+        // Pinstripe's skylights have transparent panes: the sky seen through
+        // them is the game's background fill, not scenery (#116).
+        if (m.ReadU32(Catalog.LevelIdAddr) == 8) _nativeWideSkyFill = NativeWideSkyFillOf(m, zone);
         if (_nativeWideShader == NativeWideShader.Ripple)
             for (int i = 0; i < 16; i++) _nativeWideRipple[i] = (int)m.ReadU32(0x1F800048u + (uint)i * 4u);
         if (_nativeWideShader is NativeWideShader.Tint or NativeWideShader.FogTint or NativeWideShader.Lamp)
@@ -1421,6 +1430,22 @@ public static partial class FramePacing
     // continuations run past the side walls' windows; in Cortex Power, the
     // building front of the opening camera continues past the sky band.
     static bool NativeWideFillsUnderBackdrop(IMemory m) => m.ReadU32(Catalog.LevelIdAddr) is 3 or 41;
+
+    // GpuUpdate clears the 4:3 frame with two fills when display flag 0x2000
+    // is set (and 0x80000 is not): its top rows, the zone's fill height, in
+    // the current fill colour, the rest in the zone's lower colour. The side
+    // bands are cleared to black; the upper fill is added here.
+    const uint NativeWideFillColorAddr = 0x80057968u;
+
+    static (uint Color, int Rows)? NativeWideSkyFillOf(IMemory m, uint zone)
+    {
+        uint flags = m.ReadU32(DisplayFlagsAddr);
+        if ((flags & 0x80000u) != 0 || (flags & 0x2000u) == 0) return null;
+        int rows = (int)m.ReadU32(zone + 0x2E0u);
+        if (rows is <= 0 or > 512) return null;
+        return (m.ReadU8(NativeWideFillColorAddr) | (uint)m.ReadU8(NativeWideFillColorAddr + 1) << 8
+            | (uint)m.ReadU8(NativeWideFillColorAddr + 2) << 16, rows);
+    }
 
     static void NativeWideMoveRange(List<NativeWideTriangle> from, int start, List<NativeWideTriangle> to)
     {

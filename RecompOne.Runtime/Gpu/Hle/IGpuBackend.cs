@@ -11,6 +11,8 @@ public interface IGpuBackend
     // submit
     void SetDrawEnv(in HleDrawEnv env);
     void BeginWideDepth(uint? clearColor);
+    // fill rows y..y+h-1 of both 16:9 side bands (0xBBGGRR), under everything drawn there
+    void FillWideBands(int y, int h, uint color);
     void DrawTri(in HleVertex a, in HleVertex b, in HleVertex c, in PrimFlags f);
     void DrawRect(in HleRect r, in PrimFlags f);
     void DrawLine(in HleVertex a, in HleVertex b, in PrimFlags f);
