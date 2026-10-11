@@ -20,7 +20,7 @@ public static partial class FramePacing
     static readonly Dictionary<NativeWideSceneryKey, List<NativeWideRepair>> _nativeWideSceneryRepairs = [];
     static readonly Dictionary<NativeWideSceneryKey, List<NativeWideRepair>> _nativeWideSkyArcs = [];
 
-    static IReadOnlyList<NativeWideRepair> NativeWideSceneRepairs(IMemory m, NativeWideWorld world)
+    static IReadOnlyList<NativeWideRepair> NativeWideAssetRepairs(IMemory m, NativeWideWorld world)
     {
         uint level = m.ReadU32(Catalogs.Catalog.LevelIdAddr);
         if (NativeWideSkyArc(m, world, level))

@@ -290,4 +290,14 @@ public class ViewConfig
         get => GetBool("FrameRateHotkeys", true);
         set => SetBool("FrameRateHotkeys", value);
     }
+
+    /// <summary>
+    /// Memory card saves keep the current lives and Load Game restores them (Crash 2/3
+    /// style, #21). Off = original game: every load starts with 4 lives. On by default.
+    /// </summary>
+    public bool SaveLives
+    {
+        get => GetBool("SaveLives", true);
+        set => SetBool("SaveLives", value);
+    }
 }

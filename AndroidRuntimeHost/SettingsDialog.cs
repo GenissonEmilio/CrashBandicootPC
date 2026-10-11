@@ -88,6 +88,11 @@ static class SettingsDialog
             "Texture filters auto-off on menus and cutscenes. Dedither and dejitter apply everywhere.",
             bodyFont));
 
+        var saveLives = AddSwitch(activity, card, "Save lives to memory card", view.SaveLives, bodyBold);
+        card.AddView(Hint(activity,
+            "Load Game restores the lives you had when you saved, like Crash 2 and 3. Off: every load starts with 4 lives, as in the original.",
+            bodyFont));
+
         if (gpuLabRequested != null)
         {
             card.AddView(Hint(activity, "Diagnostics", bodyBold), Margin(activity, top: 10, bottom: 2));
@@ -142,6 +147,7 @@ static class SettingsDialog
             view.TextureFilterStrength = filterStrength.Progress / 100f;
             view.Dedither = dedither.Checked;
             view.Dejitter = dejitter.Checked;
+            view.SaveLives = saveLives.Checked;
 
             ConfigManager.SaveGame();
             ConfigManager.SaveView(Array.Empty<RecompOne.Runtime.Host.Window.IPanel>());

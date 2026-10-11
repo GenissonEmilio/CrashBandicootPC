@@ -258,6 +258,7 @@ sealed partial class LauncherWindow
         var strength = Nav(new ThemeSlider { Value = (int)Math.Round(view.TextureFilterStrength * 100) });
         var dedither = Nav(new ThemeCheck("Dedither") { Checked = view.Dedither });
         var dejitter = Nav(new ThemeCheck("Dejitter") { Checked = view.Dejitter });
+        var saveLives = Nav(new ThemeCheck("Save lives to memory card") { Checked = view.SaveLives });
 
         var strengthRow = Row(Label("Filter strength", 202), strength, 30);
         void SyncStrength() => strengthRow.IsVisible = ComboValue(texFilter, 0) != 0;
@@ -281,7 +282,9 @@ sealed partial class LauncherWindow
                 strengthRow,
                 WithMargin(dedither, new Thickness(0, 0, 0, 22)),
                 WithMargin(dejitter, new Thickness(0, 0, 0, 14)),
-                Hint("Texture filters auto-off on menus & cutscenes. Dedither and dejitter apply everywhere.", 8),
+                Hint("Texture filters auto-off on menus & cutscenes. Dedither and dejitter apply everywhere."),
+                WithMargin(saveLives, new Thickness(0, 0, 0, 14)),
+                Hint("Load Game restores the lives you had when you saved, like Crash 2 and 3. Off: every load starts with 4 lives, as in the original.", 8),
             },
         };
 
@@ -298,6 +301,7 @@ sealed partial class LauncherWindow
             view.TextureFilterStrength = strength.Value / 100f;
             view.Dedither = dedither.Checked;
             view.Dejitter = dejitter.Checked;
+            view.SaveLives = saveLives.Checked;
             ConfigManager.SaveGame();
             SaveView();
             CloseSheet();

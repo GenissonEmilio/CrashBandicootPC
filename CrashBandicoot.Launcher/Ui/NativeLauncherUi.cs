@@ -96,6 +96,7 @@ public sealed class NativeLauncherUi : UserControl, ILauncherUi
     Label? _filterStrengthLabel;
     ThemeCheck? _dedither;
     ThemeCheck? _dejitter;
+    ThemeCheck? _saveLives;
     ThemeCheck? _cheatLives;
     ThemeCheck? _cheatLevel;
     ThemeCheck? _cheatGod;
@@ -289,6 +290,7 @@ public sealed class NativeLauncherUi : UserControl, ILauncherUi
             _filterStrength.Value = Math.Clamp((int)Math.Round(strength * 100), 0, 100);
         SetCheck(_dedither, state, "dedither");
         SetCheck(_dejitter, state, "dejitter");
+        SetCheck(_saveLives, state, "saveLives");
         SetCheck(_cheatLives, state, "infiniteLives");
         SetCheck(_cheatLevel, state, "levelSelect");
         SetCheck(_cheatGod, state, "godMode");
@@ -1471,6 +1473,13 @@ public sealed class NativeLauncherUi : UserControl, ILauncherUi
         y += 52;
         AddHint("Texture filters auto-off on menus & cutscenes. Dedither and dejitter apply everywhere.");
 
+        _saveLives = MakeCheck("Save lives to memory card");
+        _saveLives.Location = new Point(12, y);
+        _saveLives.Checked = true;
+        list.Controls.Add(_saveLives);
+        y += 52;
+        AddHint("Load Game restores the lives you had when you saved, like Crash 2 and 3. Off: every load starts with 4 lives, as in the original.");
+
         list.AutoScrollMinSize = new Size(0, y + 18);
 
         var save = MakePrimaryBtn("Save");
@@ -1489,6 +1498,7 @@ public sealed class NativeLauncherUi : UserControl, ILauncherUi
                 textureFilterStrength = (_filterStrength?.Value ?? 50) / 100.0,
                 dedither = _dedither?.Checked ?? false,
                 dejitter = _dejitter?.Checked ?? false,
+                saveLives = _saveLives?.Checked ?? true,
             });
             CloseSheet();
         };

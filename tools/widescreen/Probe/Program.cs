@@ -7,7 +7,7 @@
 //   --script "path:<startFrame>:<unitsPerSecond>:x,y,z[,speed];..."  (wide.py route prints one)
 //            or "<from>-<to>:<Button>+<Button>,..." pad ranges in frames
 // Environment: VOID=1 clears the side bands to magenta; NOFIX=1 drops every scene
-// repair (before/after pairs); DUMPVRAM=<render,...> dumps VRAM; BLOCK=<hex,...> limits
+// repair (before/after pairs); NOCANOPY=1 drops the jungle canopy backdrop; DUMPVRAM=<render,...> dumps VRAM; BLOCK=<hex,...> limits
 // which GOOL events to Crash are dropped while flying (default: all).
 // Uses its own config/save directory under the output folder; GodMode stays off.
 using System.Reflection;
@@ -180,6 +180,10 @@ using var noFix = Environment.GetEnvironmentVariable("NOFIX") == "1"
     ? new Hook(typeof(FramePacing).GetMethod("NativeWideSceneRepairs", BindingFlags.Static | BindingFlags.NonPublic)!,
         typeof(NoFix).GetMethod(nameof(NoFix.Empty))!.MakeGenericMethod(repairType))
     : null;
+var canopyOf = typeof(FramePacing).GetMethod("NativeWideCanopyOf", BindingFlags.Static | BindingFlags.NonPublic)!;
+using var noCanopy = Environment.GetEnvironmentVariable("NOCANOPY") == "1"
+    ? new Hook(canopyOf, typeof(NoFix).GetMethod(nameof(NoFix.None))!.MakeGenericMethod(canopyOf.ReturnType))
+    : null;
 
 using var draw = new Hook(typeof(LibGpu).GetMethod(nameof(LibGpu.DrawOTag))!,
     (Action<Action<CpuContext, IMemory>, CpuContext, IMemory>)((original, c, m) =>
@@ -265,4 +269,5 @@ sealed class Finished : Exception { }
 static class NoFix
 {
     public static IReadOnlyList<T> Empty<T>(Func<IMemory, object, IReadOnlyList<T>> original, IMemory m, object world) => [];
+    public static T? None<T>(Func<uint, T> original, uint level) => default;
 }

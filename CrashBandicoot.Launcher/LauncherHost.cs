@@ -221,6 +221,7 @@ public sealed class LauncherHost : Form
             textureFilterStrength = ConfigManager.View.TextureFilterStrength,
             dedither = ConfigManager.View.Dedither,
             dejitter = ConfigManager.View.Dejitter,
+            saveLives = ConfigManager.View.SaveLives,
             infiniteLives = CheatConfig.InfiniteLives,
             levelSelect = CheatConfig.LevelSelect,
             godMode = CheatConfig.GodMode,
@@ -666,6 +667,8 @@ public sealed class LauncherHost : Form
             ConfigManager.View.Dedither = dd.GetBoolean();
         if (root.TryGetProperty("dejitter", out var dj))
             ConfigManager.View.Dejitter = dj.GetBoolean();
+        if (root.TryGetProperty("saveLives", out var sl))
+            ConfigManager.View.SaveLives = sl.GetBoolean();
 
         ConfigManager.SaveGame();
         // Persist Fullscreen etc. without touching ImGui layout (empty panel list

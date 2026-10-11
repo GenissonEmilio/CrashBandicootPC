@@ -70,14 +70,29 @@ public static partial class FramePacing
         new(new(xMin, 10873, 98770), new(xMax, 10873, 99200), 800, from, to),
     ];
 
-    // Past the courtyard the jungle has no sky: beyond its culled edges the
-    // 16:9 view saw the black background. Behind all scenery, a camera-centred
-    // cylinder of the jungle's canopy tile (mirrored so it tiles without seams)
-    // stands in for the forest that the 4:3 view never needed. The tile (4-bit,
-    // page 0x1A, CLUT 0x402D, U 128-191, V 64-127) stays resident from the
-    // courtyard to the exit; its fringe has transparent texels, so only its
-    // opaque interior is used.
-    static void AddNativeWideBeachCanopy(IMemory m, int worldCount, short[] matrix,
+    // A jungle's canopy tile (4-bit): texture page EID, 64-halfword segment,
+    // CLUT column and row inside the page, and the tile's opaque interior.
+    readonly record struct NativeWideCanopyTile(uint Page, int Segment, int ClutColumn, int ClutRow,
+        float ULow, float UHigh, float VLow, float VHigh);
+
+    // The same 64x64 tile, U 128-191, in each level's own copy of the page.
+    static NativeWideCanopyTile? NativeWideCanopyOf(uint level) => level switch
+    {
+        // N. Sanity Beach: Ju59T, V 64-127 (page 0x1A, CLUT 0x402D in game).
+        9 => new(0x5AF0A4EFu, 2, 13, 0, 132, 190, 77, 120),
+        // Jungle Rollers: Ju5cT, V 32-95, used by every mesh of the level.
+        12 => new(0x5AF0A66Fu, 0, 7, 0, 132, 190, 45, 88),
+        _ => null,
+    };
+
+    // Jungles without sky (N. Sanity Beach past the courtyard, all of Jungle
+    // Rollers): beyond their culled edges the 16:9 view saw the black
+    // background. Behind all scenery, a camera-centred cylinder of the jungle's
+    // canopy tile (mirrored so it tiles without seams) stands in for the forest
+    // that the 4:3 view never needed. Its page is looked up by EID, so the
+    // cylinder only draws while the page is resident; the tile's fringe has
+    // transparent texels, so only its opaque interior is used.
+    static void AddNativeWideCanopy(IMemory m, NativeWideCanopyTile tile, int worldCount, short[] matrix,
         int projection, int screenX, int screenY, int drawX, int drawY, float viewCenterX, float viewCenterY,
         float coreHalf, float wideHalf, float halfHeight)
     {
@@ -90,11 +105,16 @@ public static partial class FramePacing
             scenery = true;
         }
         if (!scenery) return;
+        uint page = NativeWideTpageWord(m, tile.Page);
+        if (page == 0) return;
         var flags = new PrimFlags
         {
-            Textured = true, Gouraud = true, TPage = 0x1A, Clut = 0x402D, WideMode = WidePrimitiveMode.BackdropSides,
+            Textured = true, Gouraud = true, WideMode = WidePrimitiveMode.BackdropSides,
+            TPage = (ushort)(((int)page & 0x1C) | tile.Segment),
+            Clut = (ushort)(tile.ClutColumn | tile.ClutRow << 6 | (int)((page >> 4) & 0xFFF0u)),
         };
-        const float uLow = 132, uHigh = 190, vLow = 77, vHigh = 120;
+        float uLow = tile.ULow, uHigh = tile.UHigh;
+        float vLow = tile.VLow + (page & 0x80u), vHigh = tile.VHigh + (page & 0x80u);
         const int columns = 24;
         const float radius = 3000;
         float step = MathF.Tau / columns, height = radius * step;

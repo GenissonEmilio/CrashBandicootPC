@@ -2,6 +2,7 @@ using RecompOne.Runtime.Cdrom;
 using RecompOne.Runtime.Context;
 using RecompOne.Runtime.Dispatch;
 using RecompOne.Runtime.Hardware;
+using RecompOne.Runtime.Host;
 using RecompOne.Runtime.Memory;
 
 namespace RecompOne.Runtime.Bios;
@@ -17,7 +18,7 @@ public static class BiosA
     static CueFs? _fs;
     static CdController? _cd;
     static readonly Dictionary<uint, (string name, byte[] data, int offset)> _openFiles = new();
-    static readonly Dictionary<uint, (MemoryCard card, int[] chain, int size, int pos)> _cardFiles = new();
+    static readonly Dictionary<uint, (MemoryCard card, string name, int[] chain, int size, int pos)> _cardFiles = new();
     static uint _nextHandle = 2u;
 
     static List<(string name, int size, int block)> _ff = new();
@@ -130,7 +131,7 @@ public static class BiosA
                         c.V0 = 0xFFFFFFFFu; LastErrno = 2; break;
                     }
                     uint cfd = _nextHandle++;
-                    _cardFiles[cfd] = (card, card.Chain(first), card.FileSize(first), 0);
+                    _cardFiles[cfd] = (card, cn, card.Chain(first), card.FileSize(first), 0);
                     Diagnostics.SessionLog.Info($"card_open ok path={rawPath} fd={cfd} block={first} size={card.FileSize(first)} mode=0x{c.A1:X}");
                     c.V0 = cfd; LastErrno = 0;
                     break;
@@ -158,7 +159,7 @@ public static class BiosA
                 {
                     int no = (int)c.A2 switch { 0 => (int)c.A1, 1 => cse.pos + (int)c.A1, 2 => cse.size + (int)c.A1, _ => cse.pos };
                     no = Math.Max(0, Math.Min(no, cse.size));
-                    _cardFiles[fd] = (cse.card, cse.chain, cse.size, no);
+                    _cardFiles[fd] = cse with { pos = no };
                     c.V0 = (uint)no; LastErrno = 0; break;
                 }
                 if (!_openFiles.TryGetValue(fd, out var se)) { c.V0 = 0xFFFFFFFFu; LastErrno = 9; break; }
@@ -182,7 +183,8 @@ public static class BiosA
                 {
                     int n = (int)Math.Min(c.A2, (uint)(cre.size - cre.pos));
                     for (int i = 0; i < n; i++) m.WriteU8(c.A1 + (uint)i, cre.card.ReadByte(cre.chain, cre.pos + i));
-                    _cardFiles[fd] = (cre.card, cre.chain, cre.size, cre.pos + n);
+                    CardLives.OnRead(m, cre.name, cre.pos, c.A1, n);
+                    _cardFiles[fd] = cre with { pos = cre.pos + n };
                     Diagnostics.SessionLog.Info($"card_fread fd={fd} n={n} pos={cre.pos}");
                     BiosB.SignalSwCard(c, m, true);
                     c.V0 = (uint)n; LastErrno = 0; break;
@@ -205,9 +207,12 @@ public static class BiosA
                 if (_cardFiles.TryGetValue(fd, out var cwe))
                 {
                     int n = (int)Math.Min(c.A2, (uint)(cwe.size - cwe.pos));
-                    for (int i = 0; i < n; i++) cwe.card.WriteByte(cwe.chain, cwe.pos + i, m.ReadU8(c.A1 + (uint)i));
+                    var buf = new byte[n];
+                    for (int i = 0; i < n; i++) buf[i] = m.ReadU8(c.A1 + (uint)i);
+                    CardLives.OnWrite(m, cwe.name, cwe.pos, buf);
+                    for (int i = 0; i < n; i++) cwe.card.WriteByte(cwe.chain, cwe.pos + i, buf[i]);
                     cwe.card.Flush();
-                    _cardFiles[fd] = (cwe.card, cwe.chain, cwe.size, cwe.pos + n);
+                    _cardFiles[fd] = cwe with { pos = cwe.pos + n };
                     Diagnostics.SessionLog.Info($"card_fwrite fd={fd} n={n} pos={cwe.pos}");
                     BiosB.SignalSwCard(c, m, true);
                     c.V0 = (uint)n; LastErrno = 0; break;
