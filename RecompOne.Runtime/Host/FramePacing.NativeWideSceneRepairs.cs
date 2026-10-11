@@ -1299,6 +1299,71 @@ public static partial class FramePacing
         }
     }
 
+    // A skirt quad whose texture follows the source face's own texel scale:
+    // each point takes the UV its projection onto the face plane would have.
+    // The plain strip spreads one texture span across the whole far end, so
+    // where the two corner directions fan apart its texels stretch into
+    // long streaks.
+    static void AddNativeWidePlanarStrip(List<NativeWideRepair> output, int polygon,
+        NativeWideClipVertex a, NativeWideClipVertex b, NativeWideClipVertex c, Vector2 ua, Vector2 ub, Vector2 uc,
+        Vector3 direction, Vector3 endDirection, float distance)
+    {
+        Vector3 pa = Position(a), e = Position(b) - pa, f = Position(c) - pa;
+        float ee = Vector3.Dot(e, e), ef = Vector3.Dot(e, f), ff = Vector3.Dot(f, f);
+        float det = ee * ff - ef * ef;
+        Vector2 ue = ub - ua, uf = uc - ua;
+        if (ee < 1 || det < 1 || Math.Abs(ue.X * uf.Y - ue.Y * uf.X) < 1) return;
+        float uMin = Math.Min(ua.X, Math.Min(ub.X, uc.X)), uMax = Math.Max(ua.X, Math.Max(ub.X, uc.X));
+        float vMin = Math.Min(ua.Y, Math.Min(ub.Y, uc.Y)), vMax = Math.Max(ua.Y, Math.Max(ub.Y, uc.Y));
+        float tileW = uMax - uMin, tileH = vMax - vMin;
+        if (tileW < 1 || tileH < 1) return;
+        Vector2 Uv(Vector3 p)
+        {
+            Vector3 d = p - pa;
+            float de = Vector3.Dot(d, e), df = Vector3.Dot(d, f);
+            return ua + ue * ((de * ff - df * ef) / det) + uf * ((df * ee - de * ef) / det);
+        }
+        Vector3 pb = pa + e, farA = pa + direction * distance, farB = pb + endDirection * distance;
+        Vector3 ca = new(a.R, a.G, a.B), cb = new(b.R, b.G, b.B);
+        Triangle(pa, pb, farB, ca, cb, cb);
+        Triangle(pa, farB, farA, ca, cb, ca);
+
+        void Triangle(Vector3 p0, Vector3 p1, Vector3 p2, Vector3 c0, Vector3 c1, Vector3 c2)
+        {
+            Vector2 w0 = Uv(p0), w1 = Uv(p1), w2 = Uv(p2);
+            Vector2 d1 = w1 - w0, d2 = w2 - w0;
+            float area = d1.X * d2.Y - d1.Y * d2.X;
+            if (Math.Abs(area) < 0.001f) return;
+            float lo = Math.Min(w0.X, Math.Min(w1.X, w2.X)), hi = Math.Max(w0.X, Math.Max(w1.X, w2.X));
+            float top = Math.Min(w0.Y, Math.Min(w1.Y, w2.Y)), bottom = Math.Max(w0.Y, Math.Max(w1.Y, w2.Y));
+            int x0 = (int)Math.Floor((lo - uMin) / tileW), x1 = (int)Math.Floor((hi - uMin) / tileW);
+            int y0 = (int)Math.Floor((top - vMin) / tileH), y1 = (int)Math.Floor((bottom - vMin) / tileH);
+            if ((x1 - x0 + 1) * (y1 - y0 + 1) > 256) return;
+            for (int iy = y0; iy <= y1; iy++) for (int ix = x0; ix <= x1; ix++)
+            {
+                List<Vector2> clipped = [w0, w1, w2];
+                clipped = ClipNativeWideUv(clipped, 0, uMin + ix * tileW, true);
+                clipped = ClipNativeWideUv(clipped, 0, uMin + (ix + 1) * tileW, false);
+                clipped = ClipNativeWideUv(clipped, 1, vMin + iy * tileH, true);
+                clipped = ClipNativeWideUv(clipped, 1, vMin + (iy + 1) * tileH, false);
+                if (clipped.Count < 3) continue;
+                NativeWideClipVertex Vertex(Vector2 uv)
+                {
+                    Vector2 q = uv - w0;
+                    float l1 = (q.X * d2.Y - q.Y * d2.X) / area, l2 = (d1.X * q.Y - d1.Y * q.X) / area, l0 = 1 - l1 - l2;
+                    Vector3 p = p0 * l0 + p1 * l1 + p2 * l2, rgb = c0 * l0 + c1 * l1 + c2 * l2;
+                    float u = uv.X - (uMin + ix * tileW), v = uv.Y - (vMin + iy * tileH);
+                    if ((ix & 1) != 0) u = tileW - u;
+                    if ((iy & 1) != 0) v = tileH - v;
+                    return new(p.X, p.Y, p.Z, rgb.X, rgb.Y, rgb.Z, uMin + u, vMin + v);
+                }
+                var first = Vertex(clipped[0]);
+                for (int i = 1; i + 1 < clipped.Count; i++)
+                    output.Add(new(polygon, first, Vertex(clipped[i]), Vertex(clipped[i + 1])));
+            }
+        }
+    }
+
     static List<Vector2> ClipNativeWideUv(List<Vector2> input, int axis, float edge, bool greater)
     {
         if (input.Count == 0) return input;

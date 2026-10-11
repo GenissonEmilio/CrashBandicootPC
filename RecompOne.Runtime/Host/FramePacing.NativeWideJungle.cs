@@ -5,8 +5,9 @@ namespace RecompOne.Runtime.Host;
 
 public static partial class FramePacing
 {
-    // Jungle Rollers (level 12) and Upstream (level 15) have no sky: every mesh
-    // is ground, banks, trunks and plants cut along the 4:3 view (the retail
+    // Jungle Rollers (level 12), Upstream (level 15) and the Koala Kong cave
+    // (level 33) have no sky: every mesh is ground, banks, trunks, plants or
+    // cave rock cut along the 4:3 view (the retail
     // draw lists keep only what the 4:3 camera sees), and the 16:9 view saw
     // black past every cut. Open edges are continued outward in the plane of
     // their own face, with the face's texture, as a skirt. Edges of small
@@ -265,11 +266,26 @@ public static partial class FramePacing
         ],
     };
 
+    // Koala Kong's cave (level 33, one mesh): only the near floor and the
+    // lava are continued; the rock is filled by the side walls of
+    // NativeWideKoalaWalls (rock skirts became flat orange panels and streaks).
+    static readonly Dictionary<(int X, int Z), int[]> NativeWideKoalaSkirts = new()
+    {
+        // 0__xW
+        [(0, 0)] =
+        [
+            141, 267, 268
+        ],
+    };
+
     static IReadOnlyList<NativeWideRepair> NativeWideSceneRepairs(IMemory m, NativeWideWorld world)
     {
         var repairs = NativeWideAssetRepairs(m, world);
         uint level = m.ReadU32(Catalogs.Catalog.LevelIdAddr);
-        var skirts = level switch { 12 => NativeWideJungleSkirts, 15 => NativeWideUpstreamSkirts, _ => null };
+        var skirts = level switch
+        {
+            12 => NativeWideJungleSkirts, 15 => NativeWideUpstreamSkirts, 33 => NativeWideKoalaSkirts, _ => null
+        };
         if (skirts == null) return repairs;
         var key = new NativeWideSceneryKey(level, m.ReadU32(world.Header), m.ReadU32(world.Header + 4),
             m.ReadU32(world.Header + 8), world.PolyCount, world.VertexCount);
@@ -282,9 +298,94 @@ public static partial class FramePacing
         int authored = all.Count;
         if (skirts.TryGetValue(((int)m.ReadU32(world.Header), (int)m.ReadU32(world.Header + 8)),
                 out var skirted))
-            NativeWideSkirtRepairs(m, world, [.. skirted], all, river: level == 15);
+            NativeWideSkirtRepairs(m, world, [.. skirted], all, river: level == 15, planar: level == 33);
+        if (level == 33) NativeWideKoalaWalls(m, world, all);
         PaceLog($"native-wide level={level} skirt repairs={all.Count - authored}");
         return _nativeWideSkirts[key] = all;
+    }
+
+    // The Koala Kong arena ends at X = -4000 and X = 4000 (lava, bank and back
+    // wall all stop there), but beside the two rock pillars at its ends
+    // nothing was modelled: the 16:9 view saw black around them. The pillars'
+    // own faces are seen nearly edge-on, so their skirts were long streaks. A
+    // rock wall in each end plane is seen almost head-on instead, and the
+    // near floor runs on to it. Each is the retail texture of a source
+    // polygon (pillar rock, floor) in mirrored tiles at that polygon's texel
+    // scale, every corner shaded like the scenery near it (lava glow by the
+    // bank, dark purple elsewhere).
+    static void NativeWideKoalaWalls(IMemory m, NativeWideWorld world, List<NativeWideRepair> output)
+    {
+        // Scenery colours, except the grey vertices of self-coloured textures (lava, rails).
+        var points = new List<(Vector3 Position, Vector3 Colour)>();
+        for (int vi = 0; vi < world.VertexCount; vi++)
+        {
+            var v = ReadNativeWideLocal(m, world, vi);
+            if (Math.Abs(v.R - v.G) < 8 && Math.Abs(v.G - v.B) < 8 && v.R > 40) continue;
+            points.Add((Position(v), new Vector3(v.R, v.G, v.B)));
+        }
+        // Repair corners are mesh-local: the header holds the mesh translation.
+        var local = new Vector3((int)m.ReadU32(world.Header), (int)m.ReadU32(world.Header + 4),
+            (int)m.ReadU32(world.Header + 8));
+        NativeWideKoalaPlane(m, world, output, points, 736, new Vector3(-4000, -640, -3840) - local,
+            Vector3.UnitZ, 8960, Vector3.UnitY, 5440);
+        NativeWideKoalaPlane(m, world, output, points, 141, new Vector3(-4000, 0, 1440) - local,
+            Vector3.UnitX, 1800, Vector3.UnitZ, 3360);
+        NativeWideKoalaPlane(m, world, output, points, 767, new Vector3(4000, -640, -3840) - local,
+            Vector3.UnitZ, 8960, Vector3.UnitY, 5440);
+        NativeWideKoalaPlane(m, world, output, points, 84, new Vector3(2200, 0, 1440) - local,
+            Vector3.UnitX, 1800, Vector3.UnitZ, 3360);
+    }
+
+    static void NativeWideKoalaPlane(IMemory m, NativeWideWorld world, List<NativeWideRepair> output,
+        List<(Vector3 Position, Vector3 Colour)> points, int texture, Vector3 origin,
+        Vector3 alongU, float lengthU, Vector3 alongV, float lengthV)
+    {
+        if (!TryNativeWideMaterial(m, world, texture, 0, out _, out _,
+            out short u0, out short v0, out short u1, out short v1, out short u2, out short v2)) return;
+        float uMin = Math.Min(u0, Math.Min(u1, u2)), uMax = Math.Max(u0, Math.Max(u1, u2));
+        float vMin = Math.Min(v0, Math.Min(v1, v2)), vMax = Math.Max(v0, Math.Max(v1, v2));
+        uint poly = world.Polygons + (uint)texture * 8;
+        NativeWidePolygonVertices(FastU32(m, poly), FastU32(m, poly + 4), out int a, out int b, out int c);
+        Vector3 pa = Position(ReadNativeWideLocal(m, world, a));
+        float area = Vector3.Cross(Position(ReadNativeWideLocal(m, world, b)) - pa,
+            Position(ReadNativeWideLocal(m, world, c)) - pa).Length();
+        float uvArea = Math.Abs((u1 - u0) * (v2 - v0) - (v1 - v0) * (u2 - u0));
+        if (area < 1 || uvArea < 1 || uMax - uMin < 1 || vMax - vMin < 1) return;
+        float density = MathF.Sqrt(uvArea / area);
+        float cellU = (uMax - uMin) / density, cellV = (vMax - vMin) / density;
+        int columns = (int)MathF.Ceiling(lengthU / cellU), rows = (int)MathF.Ceiling(lengthV / cellV);
+        var dark = new Vector3(10, 7, 28);
+        const float reach = 2500;
+        Vector3 Shade(Vector3 p)
+        {
+            Vector3 sum = Vector3.Zero;
+            float weights = 0, nearest = reach;
+            foreach (var (position, colour) in points)
+            {
+                float d = Vector3.Distance(position, p);
+                if (d >= reach) continue;
+                nearest = Math.Min(nearest, d);
+                float w = 1 / MathF.Max(d * d, 1);
+                sum += colour * w;
+                weights += w;
+            }
+            return weights == 0 ? dark : Vector3.Lerp(sum / weights, dark, nearest / reach);
+        }
+        Vector3 At(int i, int j) => origin + alongU * (i * cellU) + alongV * (j * cellV);
+        var shade = new Vector3[columns + 1, rows + 1];
+        for (int i = 0; i <= columns; i++) for (int j = 0; j <= rows; j++) shade[i, j] = Shade(At(i, j));
+        for (int i = 0; i < columns; i++) for (int j = 0; j < rows; j++)
+        {
+            NativeWideClipVertex Corner(int di, int dj)
+            {
+                float u = ((i + di) & 1) == 0 ? uMin : uMax, v = ((j + dj) & 1) == 0 ? vMax : vMin;
+                var p = At(i + di, j + dj);
+                var colour = shade[i + di, j + dj];
+                return new(p.X, p.Y, p.Z, colour.X, colour.Y, colour.Z, u, v);
+            }
+            output.Add(new(texture, Corner(0, 0), Corner(1, 0), Corner(1, 1)));
+            output.Add(new(texture, Corner(0, 0), Corner(1, 1), Corner(0, 1)));
+        }
     }
 
     // skirted: polygons whose open edges get a skirt (null: all of them).
@@ -292,9 +393,12 @@ public static partial class FramePacing
     // continued: the river keeps its width, and a continued waterfall lip
     // reads as a flat blue panel beside the bank. Neither are compact pieces
     // (the tiki totems), whose cut sides would become long stretched stripes.
+    // planar (Koala Kong): skirts keep the source face's texel scale (see
+    // AddNativeWidePlanarStrip); the cave's small rock faces fan their skirts
+    // far apart, and the plain strip turned them into streaks.
     const float NativeWideSkirtMinExtent = 1500;
     static void NativeWideSkirtRepairs(IMemory m, NativeWideWorld world, HashSet<int>? skirted,
-        List<NativeWideRepair> output, bool river = false)
+        List<NativeWideRepair> output, bool river = false, bool planar = false)
     {
         int count = world.PolyCount;
         var triangles = new NativeWideClipVertex[count * 3];
@@ -379,6 +483,14 @@ public static partial class FramePacing
             var b = triangles[o + (owner.Edge + 1) % 3];
             var c = triangles[o + (owner.Edge + 2) % 3];
             var own = Vector3.Normalize(NativeWideOutward(a, b, c));
+            if (planar)
+            {
+                AddNativeWidePlanarStrip(output, owner.Polygon, a, b, c,
+                    uv[owner.Edge], uv[(owner.Edge + 1) % 3], uv[(owner.Edge + 2) % 3],
+                    NativeWideSkirtDirection(corner[Position(a)], own), NativeWideSkirtDirection(corner[Position(b)], own),
+                    NativeWideSkirtDistance);
+                continue;
+            }
             AddNativeWideSceneryStrip(output, owner.Polygon, a, b, c,
                 uv[owner.Edge], uv[(owner.Edge + 1) % 3], uv[(owner.Edge + 2) % 3],
                 NativeWideSkirtDirection(corner[Position(a)], own), NativeWideSkirtDirection(corner[Position(b)], own),
