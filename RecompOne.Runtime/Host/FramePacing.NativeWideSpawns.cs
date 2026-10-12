@@ -15,8 +15,13 @@ public static partial class FramePacing
     /// the camera crossed a zone (#75: Castle Machinery's gem path, the lives
     /// of e2_TZ while the camera is still in x0_TZ). Spawn those FruiC
     /// pickups early through the game's own GoolObjectSpawn once they are on
-    /// screen. Crates (stack links depend on spawn order) and every other
-    /// entity keep the original timing.
+    /// screen. The same goes for the ruins' scenery objects that the game
+    /// kills as soon as their zone stops being a neighbour, while they are
+    /// still in a side band (#120, Sunset Vista's facade pushers): pushers,
+    /// sliding and rotating wall platforms (RWaOC) run on the global clock, so
+    /// an early copy moves in step; wiggle platforms wait for Crash; torches
+    /// only burn. Crates (stack links depend on spawn order), enemies and
+    /// platforms whose phase starts at spawn keep the original timing.
     /// </summary>
     const uint GoolObjectSpawnAddr = 0x8001BCC8u;
     const uint GoolZoneObjectsTerminateAddr = 0x8001D200u;
@@ -39,6 +44,18 @@ public static partial class FramePacing
     const byte EntityGroupSpawn = 3;
     const byte FruiSpawnLife = 5;
     const byte FruiSpawnWumpa = 16;
+    /// <summary>
+    /// Early-spawned ruins objects by (GOOL type, spawn): half size in world
+    /// units for the on-screen test. RWaOC: 0 and 8 wall platform arrays, 4
+    /// pusher, 7 sliding platform, 10 wiggle platform; RuiOC 4 torch.
+    /// </summary>
+    static int NativeWideRuinsRadius(byte type, byte spawn) => (type, spawn) switch
+    {
+        (46, 0 or 8) => 2800,
+        (46, 4 or 7 or 10) => 1200,
+        (42, 4) => 800,
+        _ => 0,
+    };
     /// <summary>Same far limit as RGteCalcSpriteRotMatrix.</summary>
     const int NativeWideSpriteMaxDepth = 12000;
     /// <summary>Pool headroom left for the game's own spawns (96 objects).</summary>
@@ -50,6 +67,9 @@ public static partial class FramePacing
     static readonly List<uint> _nativeWideNearZones = new(9);
     static readonly List<uint> _nativeWideFarZones = new(16);
     static readonly List<uint> _nativeWideDropZones = new(4);
+    /// <summary>(GOOL type, spawn) of live objects; null until needed this frame.</summary>
+    static HashSet<(byte Type, byte Spawn)>? _nativeWideLiveKinds;
+    static readonly HashSet<(byte Type, byte Spawn)> _nativeWideLiveKindSet = [];
 
     /// <summary>
     /// Before GfxUpdateMatrices: LevelSpawnObjects and CamUpdate have run,
@@ -74,8 +94,8 @@ public static partial class FramePacing
             // GoolObjectInit would page FruiC in from disc.
             uint ldat = m.ReadU32(LdatPtrAddr);
             if (!NativeWideGuestPointer(ldat)) return;
-            if (NativeWideResidentEntry(m, m.ReadU32(ldat + LdatExecMapOff + GoolTypeFrui * 4u), GoolEntryType) == 0)
-                return;
+            bool frui = NativeWideResidentEntry(m, m.ReadU32(ldat + LdatExecMapOff + GoolTypeFrui * 4u), GoolEntryType) != 0;
+            _nativeWideLiveKinds = null;
             int budget = NativeWideFreeObjects(m, NativeWidePickupFreeMin + NativeWidePickupSpawnsPerFrame)
                 - NativeWidePickupFreeMin;
             if (budget <= 0) return;
@@ -108,9 +128,15 @@ public static partial class FramePacing
                     uint entity = EntryItem(m, zone, first + i);
                     if (!NativeWideGuestPointer(entity)) continue;
                     if (m.ReadU8(entity + EntityGroupOff) != EntityGroupSpawn) continue;
-                    if (m.ReadU8(entity + EntityTypeOff) != GoolTypeFrui) continue;
+                    byte type = m.ReadU8(entity + EntityTypeOff);
                     byte spawn = m.ReadU8(entity + EntitySubtypeOff);
-                    if (spawn is not (FruiSpawnLife or FruiSpawnWumpa)) continue;
+                    int radius;
+                    if (type == GoolTypeFrui && spawn is FruiSpawnLife or FruiSpawnWumpa)
+                    {
+                        if (!frui) continue;
+                        radius = 0;
+                    }
+                    else if ((radius = NativeWideRuinsRadius(type, spawn)) == 0) continue;
                     // Ids 1-4 belong to the main object in GoolObjectSpawn.
                     uint id = m.ReadU16(entity + EntityIdOff);
                     if (id < 5 || (m.ReadU32(EntitySpawnsAddr + id * 4u) & 3u) != 0) continue;
@@ -123,7 +149,11 @@ public static partial class FramePacing
                             out int sx, out int sy, out int sz))
                         continue;
                     if (sz <= proj || sz > far) continue;
-                    if (Math.Abs(sx) > wideMid || Math.Abs(sy) > NativeWideFrustumMidY) continue;
+                    int pad = radius * proj / sz;
+                    if (Math.Abs(sx) > wideMid + pad || Math.Abs(sy) > NativeWideFrustumMidY + pad) continue;
+                    // A model is only spawned while one like it is alive: its code,
+                    // model and animations are resident then.
+                    if (radius > 0 && !NativeWideLiveKind(m, type, spawn)) continue;
                     if (!CallNativeWideSpawn(c, m, zone, i)) return;
                     _nativeWidePickupZones[zone] = m.ReadU32(zone + 4u);
                     if (--budget == 0) return;
@@ -230,6 +260,37 @@ public static partial class FramePacing
         {
             _nativeWidePickupZones.Remove(zone);
             TerminateNativeWideZone(c, m, zone);
+        }
+    }
+
+    static bool NativeWideLiveKind(IMemory m, byte type, byte spawn)
+    {
+        if (_nativeWideLiveKinds == null)
+        {
+            _nativeWideLiveKinds = _nativeWideLiveKindSet;
+            _nativeWideLiveKinds.Clear();
+            int left = ObjectPoolMax;
+            for (int h = 0; h < HandleCount && left > 0; h++)
+                CollectNativeWideLiveKinds(m, m.ReadU32(HandlesAddr + (uint)(h * 8) + HandleChildrenOff), ref left);
+        }
+        return _nativeWideLiveKinds.Contains((type, spawn));
+    }
+
+    static void CollectNativeWideLiveKinds(IMemory m, uint obj, ref int left)
+    {
+        int n = 0;
+        while (NativeWideGuestPointer(obj) && n++ < ObjectPoolMax && left-- > 0)
+        {
+            if (m.ReadU32(obj) == HandleListType)
+                CollectNativeWideLiveKinds(m, m.ReadU32(obj + HandleChildrenOff), ref left);
+            else
+            {
+                uint entity = m.ReadU32(obj + ObjEntityOff);
+                if (NativeWideGuestPointer(entity))
+                    _nativeWideLiveKinds!.Add((m.ReadU8(entity + EntityTypeOff), m.ReadU8(entity + EntitySubtypeOff)));
+                CollectNativeWideLiveKinds(m, m.ReadU32(obj + ObjChildrenOff), ref left);
+            }
+            obj = m.ReadU32(obj + ObjSiblingOff);
         }
     }
 

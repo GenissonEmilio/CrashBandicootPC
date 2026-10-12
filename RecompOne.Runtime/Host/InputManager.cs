@@ -149,6 +149,7 @@ internal static unsafe class InputManager
         PollKeyboard();
         PollGamepads();
         ApplyVirtualPad();
+        AnalogMovement.ApplyStickDirections();
         Controller.Connected2 = _pad1 != null || HasAnyKey(ConfigManager.Game.Keys2);
     }
 

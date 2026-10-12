@@ -99,6 +99,7 @@ public sealed class NativeLauncherUi : UserControl, ILauncherUi
     ThemeCheck? _dejitter;
     ThemeCheck? _crtFilter;
     ThemeCheck? _saveLives;
+    ThemeCheck? _analogMovement;
     ThemeCheck? _cheatLives;
     ThemeCheck? _cheatLevel;
     ThemeCheck? _cheatGod;
@@ -295,6 +296,7 @@ public sealed class NativeLauncherUi : UserControl, ILauncherUi
         SetCheck(_dejitter, state, "dejitter");
         SetCheck(_crtFilter, state, "crtFilter");
         SetCheck(_saveLives, state, "saveLives");
+        SetCheck(_analogMovement, state, "analogMovement");
         SetCheck(_cheatLives, state, "infiniteLives");
         SetCheck(_cheatLevel, state, "levelSelect");
         SetCheck(_cheatGod, state, "godMode");
@@ -1497,6 +1499,12 @@ public sealed class NativeLauncherUi : UserControl, ILauncherUi
         y += 52;
         AddHint("Load Game restores the lives you had when you saved, like Crash 2 and 3. Off: every load starts with 4 lives, as in the original.");
 
+        _analogMovement = MakeCheck("Analog movement (left stick)");
+        _analogMovement.Location = new Point(12, y);
+        list.Controls.Add(_analogMovement);
+        y += 52;
+        AddHint("The gamepad left stick steers Crash in any direction, not only the 8 of the D-pad. D-pad and keyboard are unchanged.");
+
         list.AutoScrollMinSize = new Size(0, y + 18);
 
         var save = MakePrimaryBtn("Save");
@@ -1518,6 +1526,7 @@ public sealed class NativeLauncherUi : UserControl, ILauncherUi
                 dejitter = _dejitter?.Checked ?? false,
                 crtFilter = _crtFilter?.Checked ?? false,
                 saveLives = _saveLives?.Checked ?? true,
+                analogMovement = _analogMovement?.Checked ?? false,
             });
             CloseSheet();
         };

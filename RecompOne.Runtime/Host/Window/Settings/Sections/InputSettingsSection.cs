@@ -59,6 +59,11 @@ internal sealed class InputSettingsSection : ISettingsSection
             ImGui.Spacing();
             DrawHostHotkeys();
         }
+        else if (_padIndex == 0)
+        {
+            ImGui.Spacing();
+            DrawAnalogMovement();
+        }
 
         ImGui.Spacing();
         if (ImGui.Button("Reset to Defaults"))
@@ -249,6 +254,17 @@ internal sealed class InputSettingsSection : ISettingsSection
 
         ImGui.EndTable();
         ImGuiEx.TextDisabled("1 original, 2 60, 3 120, 4 240, 5 uncapped");
+    }
+
+    static void DrawAnalogMovement()
+    {
+        bool analog = ConfigManager.View.AnalogMovement;
+        if (ImGui.Checkbox("Analog movement (left stick)", ref analog))
+        {
+            ConfigManager.View.AnalogMovement = analog;
+            ConfigManager.SaveView(PanelManager.Panels);
+        }
+        ImGuiEx.TextDisabled("Left stick steers Crash in any direction, not only 8. D-pad unchanged.");
     }
 
     static string? GetPressedKey()

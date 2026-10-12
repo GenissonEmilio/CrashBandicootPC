@@ -7,7 +7,7 @@
 //   --script "path:<startFrame>:<unitsPerSecond>:x,y,z[,speed];..."  (wide.py route prints one)
 //            or "<from>-<to>:<Button>+<Button>,..." pad ranges in frames
 // Environment: VOID=1 clears the side bands to magenta; NOFIX=1 drops every scene
-// repair (before/after pairs); NOCANOPY=1 drops the jungle canopy backdrop; DUMPVRAM=<render,...> dumps VRAM; BLOCK=<hex,...> limits
+// repair (before/after pairs); NOCANOPY=1 drops the jungle canopy backdrop; NOEARLY=1 disables early ruins-object spawns; OBJLOG=<type> logs live objects of a GOOL type; DUMPVRAM=<render,...> dumps VRAM; BLOCK=<hex,...> limits
 // which GOOL events to Crash are dropped while flying (default: all).
 // Uses its own config/save directory under the output folder; GodMode stays off.
 using System.Reflection;
@@ -135,6 +135,32 @@ int[] CrashPos(IMemory m)
     return [(int)m.ReadU32(crash + 0x80) >> 8, (int)m.ReadU32(crash + 0x84) >> 8, (int)m.ReadU32(crash + 0x88) >> 8];
 }
 
+// OBJLOG=<gool type> logs that type's live objects per frame: entity id, spawn, state, anim frame, x/y/z.
+int objLogType = int.TryParse(Environment.GetEnvironmentVariable("OBJLOG"), out int olt) ? olt : -1;
+List<int[]> LiveObjects(IMemory m)
+{
+    var found = new List<int[]>();
+    void Walk(uint obj, int depth)
+    {
+        for (int n = 0; (obj & 0xFFE00000u) == 0x80000000u && n < 96 && depth < 8; n++)
+        {
+            if (m.ReadU32(obj) == 2) Walk(m.ReadU32(obj + 4), depth + 1);
+            else
+            {
+                uint entity = m.ReadU32(obj + 0x110);
+                if ((entity & 0xFFE00000u) == 0x80000000u && m.ReadU8(entity + 18) == objLogType)
+                    found.Add([m.ReadU16(entity + 8), m.ReadU8(entity + 19), (int)m.ReadU32(obj + 0x2C),
+                        (int)m.ReadU32(obj + 0x10C) >> 8, (int)m.ReadU32(obj + 0x80) >> 8, (int)m.ReadU32(obj + 0x84) >> 8,
+                        (int)m.ReadU32(obj + 0x88) >> 8]);
+                Walk(m.ReadU32(obj + 0x6C), depth + 1);
+            }
+            obj = m.ReadU32(obj + 0x68);
+        }
+    }
+    try { for (int h = 0; h < 8; h++) Walk(m.ReadU32(0x80060DB8u + (uint)h * 8 + 4), 0); } catch { }
+    return found;
+}
+
 object Describe(IMemory m)
 {
     uint zoneEntry = m.ReadU32(CamZone);
@@ -167,6 +193,7 @@ object Describe(IMemory m)
         render = renders, frame = frames, zone = zoneName, crash = CrashPos(m),
         cam = new[] { (int)m.ReadU32(0x80057864u) >> 8, (int)m.ReadU32(0x80057868u) >> 8, (int)m.ReadU32(0x8005786Cu) >> 8 },
         proj = (int)m.ReadU32(0x800578D0u), matrix = mat, worlds, cpu = FramePacing.LastNativeWideCpuMs,
+        objs = objLogType >= 0 ? LiveObjects(m) : null,
     };
 }
 
@@ -179,6 +206,11 @@ var repairType = typeof(FramePacing).GetNestedType("NativeWideRepair", BindingFl
 using var noFix = Environment.GetEnvironmentVariable("NOFIX") == "1"
     ? new Hook(typeof(FramePacing).GetMethod("NativeWideSceneRepairs", BindingFlags.Static | BindingFlags.NonPublic)!,
         typeof(NoFix).GetMethod(nameof(NoFix.Empty))!.MakeGenericMethod(repairType))
+    : null;
+// NOEARLY=1 keeps the game's own spawn timing for ruins objects (no early 16:9 spawns).
+var ruinsRadius = typeof(FramePacing).GetMethod("NativeWideRuinsRadius", BindingFlags.Static | BindingFlags.NonPublic);
+using var noEarly = Environment.GetEnvironmentVariable("NOEARLY") == "1" && ruinsRadius != null
+    ? new Hook(ruinsRadius, (Func<Func<byte, byte, int>, byte, byte, int>)((original, type, spawn) => 0))
     : null;
 var canopyOf = typeof(FramePacing).GetMethod("NativeWideCanopyOf", BindingFlags.Static | BindingFlags.NonPublic)!;
 using var noCanopy = Environment.GetEnvironmentVariable("NOCANOPY") == "1"

@@ -24,6 +24,10 @@ public static partial class FramePacing
         // floors really end.
         bool roof = x is 81600 or 103600 or 142400 or 151235 or 175200;
         NativeWideRowRepairs(faces, roof ? NativeWideSunsetRoofRows : NativeWideSunsetRows, repairs);
+        // The third shaft's mesh (m) meets the last rooftop (l), whose facade
+        // ends at absolute X 151200 against the sky: its back wall copies stop there.
+        if (x == 158400)
+            repairs.RemoveAll(r => Math.Min(r.A.X, Math.Min(r.B.X, r.C.X)) < 151200 - x);
         // The first two shafts share the temple's outer left wall (absolute X
         // 111200). Rooms and forest lie beyond it, so its continuation keeps
         // its true depth and hides them.
@@ -32,7 +36,7 @@ public static partial class FramePacing
         for (int i = 0; shaft && i < repairs.Count; i++)
         {
             var r = repairs[i];
-            if (r.A.X == outerWall && r.B.X == outerWall && r.C.X == outerWall)
+            if (Math.Abs(r.A.X - outerWall) <= 16 && Math.Abs(r.B.X - outerWall) <= 16 && Math.Abs(r.C.X - outerWall) <= 16)
                 repairs[i] = r with { Boundary = true };
         }
         return repairs;
@@ -204,19 +208,41 @@ public static partial class FramePacing
             if (!f.SemiTrans) opaque.Add(f.T);
         }
         var repairs = new List<NativeWideRepair>();
+        // Cell corners are off the grid by up to 16, so a copy's corner can miss
+        // the corner it meets by as much and open a crack: it takes that
+        // corner's position (same plane) instead.
+        var corners = new Dictionary<(int, int, float), List<Vector3>>();
+        static (int, int, float) CellOf(Vector3 p) => ((int)MathF.Floor(p.X / 64), (int)MathF.Floor(p.Y / 64), p.Z);
+        void AddCorner(Vector3 p)
+        {
+            if (!corners.TryGetValue(CellOf(p), out var list)) corners[CellOf(p)] = list = [];
+            list.Add(p);
+        }
+        foreach (var f in faces) foreach (var v in f.T) AddCorner(Position(v));
+        NativeWideClipVertex Snap(NativeWideClipVertex v)
+        {
+            var p = Position(v);
+            var (cx, cy, z) = CellOf(p);
+            for (int dx = -1; dx <= 1; dx++)
+                for (int dy = -1; dy <= 1; dy++)
+                    if (corners.TryGetValue((cx + dx, cy + dy, z), out var list))
+                        foreach (var q in list)
+                            if (q != p && Vector3.DistanceSquared(p, q) <= 24 * 24) return v with { X = q.X, Y = q.Y };
+            return v;
+        }
         foreach (var copy in NativeWideSunsetStartCopies)
             for (int pi = 0; pi < faces.Length; pi++)
             {
                 var t = faces[pi].T;
                 if (!faces[pi].Valid || (copy.Opaque && faces[pi].SemiTrans) || t.Any(v => Position(v) + origin != Vector3.Clamp(Position(v) + origin, copy.Min, copy.Max)))
                     continue;
-                NativeWideClipVertex[] moved = [.. t.Select(v => v with
+                NativeWideClipVertex[] moved = [.. t.Select(v => Snap(v with
                 {
                     X = (float.IsNaN(copy.MirrorX) ? v.X : 2 * (copy.MirrorX - origin.X) - v.X) + copy.Offset.X,
                     Y = v.Y + copy.Offset.Y, Z = v.Z + copy.Offset.Z,
-                })];
-                // Cell corners are off the 1600 grid by up to 16: test a slightly
-                // smaller triangle, so neighbours touching by that much still fit.
+                }))];
+                // Test a slightly smaller triangle, so neighbours touching by a few
+                // units still fit.
                 var centre = (Position(moved[0]) + Position(moved[1]) + Position(moved[2])) / 3;
                 if ((copy.Opaque ? opaque : all).Overlaps([.. moved.Select(v => v with
                 {
@@ -225,26 +251,35 @@ public static partial class FramePacing
                 })])) continue;
                 all.Add(moved);
                 opaque.Add(moved);
+                foreach (var v in moved) AddCorner(Position(v));
                 repairs.Add(new(pi, moved[0], moved[1], moved[2]));
             }
         return repairs;
     }
 
-    // Side walls (X planes) continue towards the camera (+Z); back walls,
-    // ledge fronts (Z planes) and floors (Y planes) both ways along X. The
-    // shafts' bases (statue fronts and their floors) also stop at the outer
-    // walls, and the lowest side wall rows are only two cells deep.
+    // The shafts' side walls (X planes, tall and reaching the shaft front at
+    // Z 1600) continue towards the camera (+Z); not the sides of blocks,
+    // pillars and door jambs. Back walls, statue fronts (Z planes) and floors
+    // (Y planes) continue both ways along X, but not the thin platforms
+    // (ledges, slabs) on the walls. The shafts' bases (statue fronts and their
+    // floors) also stop at the outer walls, and the lowest side wall rows are
+    // only two cells deep.
     static readonly NativeWideRows[] NativeWideSunsetRows =
     [
-        new(0, 2, Low: false, High: true, Extend: 4800, MinBlock: 1200, MinHeight: 1600, MinLength: 400, MinRun: 400),
-        new(2, 0, Low: true, High: true, Extend: 3200, MinBlock: 800, MinHeight: 800, MinLength: 800),
-        new(1, 0, Low: true, High: true, Extend: 3200, MinBlock: 800, MinHeight: 400, MinLength: 800),
+        new(0, 2, Low: false, High: true, Extend: 4800, MinBlock: 1200, MinHeight: 4800, MinLength: 400, MinRun: 400,
+            EdgeColour: true, Skew: 16, MinEnd: 1500),
+        new(2, 0, Low: true, High: true, Extend: 3200, MinBlock: 800, MinHeight: 800, MinLength: 800,
+            MinRowHeight: 300, EdgeColour: true, Skew: 16),
+        new(1, 0, Low: true, High: true, Extend: 3200, MinBlock: 800, MinHeight: 400, MinLength: 800,
+            MinThickness: 300, EdgeColour: true, Skew: 16),
     ];
 
     // On the rooftops only tall walls continue.
     static readonly NativeWideRows[] NativeWideSunsetRoofRows =
     [
-        new(0, 2, Low: false, High: true, Extend: 4800, MinBlock: 1200, MinHeight: 1600, MinLength: 400, MinRun: 400),
-        new(2, 0, Low: true, High: true, Extend: 3200, MinBlock: 800, MinHeight: 1600, MinLength: 1600),
+        new(0, 2, Low: false, High: true, Extend: 4800, MinBlock: 1200, MinHeight: 4800, MinLength: 400, MinRun: 400,
+            EdgeColour: true, Skew: 16, MinEnd: 1500),
+        new(2, 0, Low: true, High: true, Extend: 3200, MinBlock: 800, MinHeight: 1600, MinLength: 1600,
+            MinRowHeight: 300, EdgeColour: true, Skew: 16),
     ];
 }

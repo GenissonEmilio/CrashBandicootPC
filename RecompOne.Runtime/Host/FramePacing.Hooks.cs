@@ -325,6 +325,8 @@ public static partial class FramePacing
     public static bool PrePhysics(CpuContext c, IMemory m)
     {
         RestorePadSpin(m);
+        // Any frame rate, also Original 30 FPS.
+        AnalogMovement.PrePhysics(m, c.A0);
         if (!IsActive(m)) return true;
         // CODE may have Warp_In → hog spawn (calcpath) or EventHit → death.
         // Snapshot ran on the previous state, so re-read the ride flag.
@@ -357,6 +359,7 @@ public static partial class FramePacing
 
     public static void PostObjectPhysics(CpuContext c, IMemory m)
     {
+        AnalogMovement.PostPhysics(m);
         if (_crashObj && IsActive(m))
             FinishPacedScale(m);
     }

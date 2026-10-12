@@ -321,4 +321,14 @@ public class ViewConfig
         get => GetBool("SaveLives", true);
         set => SetBool("SaveLives", value);
     }
+
+    /// <summary>
+    /// Pad 1 left stick steers Crash in any direction (#131), not only the eight
+    /// D-pad directions. D-pad and keyboard are unchanged. Off by default.
+    /// </summary>
+    public bool AnalogMovement
+    {
+        get => GetBool("AnalogMovement");
+        set => SetBool("AnalogMovement", value);
+    }
 }

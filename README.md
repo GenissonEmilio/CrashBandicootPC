@@ -24,7 +24,7 @@ This isn't an emulator. The original PS1 code is **statically recompiled** into 
 - **Image options.** Bilinear, sharp bilinear and soft smooth texture filters, plus **dedither** and **dejitter** to remove the PS1 dithering and wobbly polygons, and an optional **CRT filter** (MattiasCRT) for the old TV look.
 - **Cheats.** Infinite lives, level select, god mode and **fly mode**.
 - **Mods.** Drop C# mods, texture packs and asset overlays into `mods/` and switch them on or off from the launcher. See the [modding guide](docs/MODDING.md).
-- **Controllers and keyboard.** Gamepad support and rebindable keys.
+- **Controllers and keyboard.** Gamepad support, rebindable keys and optional **analog movement**: the left stick steers Crash in any direction, not only the 8 of the D-pad.
 - **Windows, Linux and Android.**
 - **Plays from a `.chd` or `.cue` + `.bin` dump.** No extraction or converter needed.
 

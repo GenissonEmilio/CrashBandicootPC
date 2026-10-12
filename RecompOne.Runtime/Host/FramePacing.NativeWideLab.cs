@@ -274,14 +274,67 @@ public static partial class FramePacing
     // the end or a face of the same plane is in the way. Only planes at least
     // MinHeight tall across their rows, and rows whose whole cells span
     // MinLength, take part. A run shorter than MinBlock but at least MinRun
-    // long continues as a whole. Copies never overlap faces or each other.
+    // long continues as a whole. Rows thinner than MinRowHeight (ledge fronts;
+    // not bands with the wall going on above and below them) and rows with a
+    // parallel face closer than MinThickness behind or in front of them (the
+    // top and bottom of a thin platform) only get their half cells completed:
+    // a platform must not grow. Copies never overlap
+    // faces or each other. EdgeColour shades the copies like the run's end
+    // edge (by height across the row) instead of keeping the source cells'
+    // vertex colours, so baked light (a brazier's glow) does not repeat.
+    // Skew: how far cell bounds may overlap along U and still count as free
+    // (cells whose corners are off the grid overlap their neighbours' bounds);
+    // above 2, cell lengths are measured along their edges. A run continues
+    // towards +U only if it reaches MinEnd.
     readonly record struct NativeWideRows(int Normal, int U, bool Low, bool High, float Extend, float MinBlock,
-        float MinHeight, float MinLength, float MinRun = float.PositiveInfinity);
+        float MinHeight, float MinLength, float MinRun = float.PositiveInfinity, float MinRowHeight = 0,
+        float MinThickness = 0, bool EdgeColour = false, float Skew = 2, float MinEnd = float.NegativeInfinity);
 
     static float NativeWideAxis(NativeWideClipVertex v, int axis) => axis == 0 ? v.X : axis == 1 ? v.Y : v.Z;
 
     static NativeWideClipVertex NativeWideMoved(NativeWideClipVertex v, int axis, float by) =>
         axis == 0 ? v with { X = v.X + by } : axis == 1 ? v with { Y = v.Y + by } : v with { Z = v.Z + by };
+
+    // Length along U of a cell's edges at the same V (its bottom or top edge),
+    // the shorter one: a copy then overlaps its source a little instead of
+    // leaving a crack. The bounds' length when no edge runs along U.
+    static float NativeWideCellLength(List<NativeWideRepair> cell, int axisU, int axisV, float bounds)
+    {
+        float best = float.MaxValue;
+        foreach (var row in cell.SelectMany(r => new[] { r.A, r.B, r.C }).GroupBy(v => NativeWideAxis(v, axisV)))
+        {
+            float lo = row.Min(v => NativeWideAxis(v, axisU)), hi = row.Max(v => NativeWideAxis(v, axisU));
+            if (hi - lo >= bounds / 2) best = Math.Min(best, hi - lo);
+        }
+        return best < float.MaxValue ? best : bounds;
+    }
+
+    // Triangle t clipped to the side (sign) of the line through a and b in the
+    // (U, V) plane, every attribute interpolated; a fan of triangles.
+    static List<NativeWideClipVertex[]> NativeWideClipToSide(NativeWideClipVertex[] t, int axisU, int axisV,
+        NativeWideClipVertex a, NativeWideClipVertex b, int sign)
+    {
+        float au = NativeWideAxis(a, axisU), av = NativeWideAxis(a, axisV);
+        float du = NativeWideAxis(b, axisU) - au, dv = NativeWideAxis(b, axisV) - av;
+        // Distance along U from the line, positive on the kept side.
+        float D(NativeWideClipVertex v) => sign * (NativeWideAxis(v, axisU) - (au + du * (NativeWideAxis(v, axisV) - av) / dv));
+        static NativeWideClipVertex Lerp(NativeWideClipVertex p, NativeWideClipVertex q, float s) => new(
+            p.X + (q.X - p.X) * s, p.Y + (q.Y - p.Y) * s, p.Z + (q.Z - p.Z) * s, p.R + (q.R - p.R) * s,
+            p.G + (q.G - p.G) * s, p.B + (q.B - p.B) * s, p.U + (q.U - p.U) * s, p.V + (q.V - p.V) * s);
+        var poly = new List<NativeWideClipVertex>();
+        for (int i = 0; i < 3; i++)
+        {
+            var p = t[i]; var q = t[(i + 1) % 3];
+            float dp = D(p), dq = D(q);
+            if (dp >= 0) poly.Add(p);
+            if ((dp >= 0) != (dq >= 0)) poly.Add(Lerp(p, q, dp / (dp - dq)));
+        }
+        var fan = new List<NativeWideClipVertex[]>();
+        for (int i = 1; i + 1 < poly.Count; i++)
+            if (Vector3.Cross(Position(poly[i]) - Position(poly[0]), Position(poly[i + 1]) - Position(poly[0])).Length() > 1)
+                fan.Add([poly[0], poly[i], poly[i + 1]]);
+        return fan;
+    }
 
     static void NativeWideRowRepairs(NativeWideFace[] all, NativeWideRows[] specs, List<NativeWideRepair> repairs)
     {
@@ -294,9 +347,13 @@ public static partial class FramePacing
             for (int pi = 0; pi < all.Length; pi++)
             {
                 var t = all[pi].T;
-                float plane = NativeWideAxis(t[0], spec.Normal);
-                if (!all[pi].Valid || NativeWideAxis(t[1], spec.Normal) != plane
-                    || NativeWideAxis(t[2], spec.Normal) != plane) continue;
+                // With Skew, faces leaning by up to that much (corners off the
+                // grid) belong to the plane of their lowest corner.
+                float n0 = NativeWideAxis(t[0], spec.Normal), n1 = NativeWideAxis(t[1], spec.Normal),
+                    n2 = NativeWideAxis(t[2], spec.Normal);
+                float plane = Math.Min(n0, Math.Min(n1, n2));
+                float lean = Math.Max(n0, Math.Max(n1, n2)) - plane;
+                if (!all[pi].Valid || lean > (spec.Skew > 2 ? spec.Skew : 0)) continue;
                 float lo = Math.Min(NativeWideAxis(t[0], spec.U), Math.Min(NativeWideAxis(t[1], spec.U), NativeWideAxis(t[2], spec.U)));
                 float hi = Math.Max(NativeWideAxis(t[0], spec.U), Math.Max(NativeWideAxis(t[1], spec.U), NativeWideAxis(t[2], spec.U)));
                 float low = Math.Min(NativeWideAxis(t[0], axisV), Math.Min(NativeWideAxis(t[1], axisV), NativeWideAxis(t[2], axisV)));
@@ -305,12 +362,21 @@ public static partial class FramePacing
                 list.Add((lo, hi, low, high));
                 // Decals and other semi-transparent faces block copies but are not copied.
                 if (all[pi].SemiTrans) continue;
+                // Rows whose bounds differ by less than Skew are one row.
+                if (spec.Skew > 2)
+                    foreach (var key in rows.Keys)
+                        if (key.Plane == plane && Math.Abs(key.V0 - low) <= spec.Skew && Math.Abs(key.V1 - high) <= spec.Skew)
+                        {
+                            (low, high) = (key.V0, key.V1);
+                            break;
+                        }
                 if (!rows.TryGetValue((plane, low, high), out var cells)) rows[(plane, low, high)] = cells = [];
                 if (!cells.TryGetValue((lo, hi), out var cell)) cells[(lo, hi)] = cell = [];
                 cell.Add(new(pi, t[0], t[1], t[2]));
             }
+            float skewV = Math.Max(2, spec.Skew);
             bool Free(float plane, float lo, float hi, float low, float high) => !faces[plane].Any(r =>
-                r.U0 < hi - 2 && lo < r.U1 - 2 && r.V0 < high - 2 && low < r.V1 - 2);
+                r.U0 < hi - spec.Skew && lo < r.U1 - spec.Skew && r.V0 < high - skewV && low < r.V1 - skewV);
             foreach (var ((plane, low, high), cells) in rows)
             {
                 var span = faces[plane];
@@ -322,7 +388,7 @@ public static partial class FramePacing
                     float area = (hi - lo) * (high - low), covered = 0;
                     foreach (var r in tris)
                         covered += Vector3.Cross(Position(r.B) - Position(r.A), Position(r.C) - Position(r.A)).Length() / 2;
-                    if (covered >= area * 0.98f) { whole.Add((lo, hi, tris)); continue; }
+                    if (covered >= area * (spec.Skew > 2 ? 0.9f : 0.98f)) { whole.Add((lo, hi, tris)); continue; }
                     var t = tris[0];
                     if (tris.Count != 1 || Math.Abs(covered - area / 2) > area * 0.02f
                         || !NativeWideOppositeCorner([t.A, t.B, t.C], out var p, out var q, out var corner)) continue;
@@ -330,6 +396,18 @@ public static partial class FramePacing
                     whole.Add((lo, hi, [t, repairs[^1]]));
                 }
                 if (whole.Count == 0 || whole.Max(e => e.U1) - whole.Min(e => e.U0) < spec.MinLength) continue;
+                float rowLo = whole.Min(e => e.U0), rowHi = whole.Max(e => e.U1);
+                // A thin row is a ledge front unless it is a band of a wall: the
+                // plane goes on both above and below it.
+                if (high - low < spec.MinRowHeight && !(span.Any(r => Math.Abs(r.V1 - low) <= spec.Skew
+                        && r.U0 < rowHi - 2 && rowLo < r.U1 - 2)
+                    && span.Any(r => Math.Abs(r.V0 - high) <= spec.Skew && r.U0 < rowHi - 2 && rowLo < r.U1 - 2))) continue;
+                // A platform's other side covers most of the row; faces within Skew of the
+                // plane (water just below a floor) and small props nearby do not count.
+                if (spec.MinThickness > 0 && faces.Any(f => Math.Abs(f.Key - plane) > Math.Max(spec.Skew, 0.5f)
+                    && Math.Abs(f.Key - plane) < spec.MinThickness
+                    && f.Value.Where(r => r.V0 < high - 2 && low < r.V1 - 2)
+                        .Sum(r => Math.Max(0, Math.Min(r.U1, rowHi) - Math.Max(r.U0, rowLo))) >= (rowHi - rowLo) / 2)) continue;
                 // Runs of adjacent whole cells. Every free end of a run continues,
                 // so the gaps between runs (wall hidden behind an arch or machine
                 // in 4:3) close too. Openings that show real scenery or the sky
@@ -338,22 +416,55 @@ public static partial class FramePacing
                 var runs = new List<List<(float U0, float U1, List<NativeWideRepair> T)>>();
                 foreach (var cell in whole)
                 {
-                    if (runs.Count > 0 && Math.Abs(runs[^1][^1].U1 - cell.U0) <= 2) runs[^1].Add(cell);
+                    if (runs.Count > 0 && Math.Abs(runs[^1][^1].U1 - cell.U0) <= Math.Max(2, spec.Skew)) runs[^1].Add(cell);
                     else runs.Add([cell]);
                 }
                 foreach (var run in runs)
                     foreach (int side in new[] { -1, 1 })
                     {
                         if (side < 0 ? !spec.Low : !spec.High) continue;
-                        // The run's outermost cells, at least MinBlock long.
+                        // Only runs reaching MinEnd (+U) continue that way.
+                        if (side > 0 && run[^1].U1 < spec.MinEnd) continue;
+                        // The run's outermost cells, at least MinBlock long. A cell's
+                        // length is measured along one of its edges: cells skewed by a
+                        // few units (corners off the grid) are longer in their bounds,
+                        // and copies moved by that would open a crack.
                         var block = new List<(float U0, float U1, List<NativeWideRepair> T)>();
                         float length = 0;
                         for (int i = 0; i < run.Count && length < spec.MinBlock; i++)
                         {
                             block.Add(run[side > 0 ? run.Count - 1 - i : i]);
-                            length += block[^1].U1 - block[^1].U0;
+                            float bounds = block[^1].U1 - block[^1].U0;
+                            length += spec.Skew > 2 ? NativeWideCellLength(block[^1].T, spec.U, axisV, bounds) : bounds;
                         }
                         if (length < spec.MinBlock && length < spec.MinRun) continue;
+                        // Colours of the run's end edge at the bottom and top of the row.
+                        var endCell = run[side > 0 ? run.Count - 1 : 0];
+                        float endU = side > 0 ? endCell.U1 : endCell.U0;
+                        var edge = endCell.T.SelectMany(r => new[] { r.A, r.B, r.C })
+                            .Where(v => Math.Abs(NativeWideAxis(v, spec.U) - endU) <= 16).ToList();
+                        bool shade = spec.EdgeColour && edge.Count > 0;
+                        // The run's end edge as a line in (U, V). Cells off the grid by a
+                        // few units make a copy's start edge differ from the edge it
+                        // follows (the run's end, or the previous copy's end).
+                        bool endLine = spec.Skew > 2 && edge.Count >= 2;
+                        var endA = endLine ? edge.MinBy(v => NativeWideAxis(v, axisV)) : default;
+                        var endB = endLine ? edge.MaxBy(v => NativeWideAxis(v, axisV)) : default;
+                        endLine &= NativeWideAxis(endB, axisV) - NativeWideAxis(endA, axisV) > 1;
+                        var bottom = shade ? edge.MinBy(v => NativeWideAxis(v, axisV)) : default;
+                        var top = shade ? edge.MaxBy(v => NativeWideAxis(v, axisV)) : default;
+                        NativeWideClipVertex Copy(NativeWideClipVertex v, float offset)
+                        {
+                            v = NativeWideMoved(v, spec.U, offset);
+                            if (!shade) return v;
+                            float span = NativeWideAxis(top, axisV) - NativeWideAxis(bottom, axisV);
+                            float s = span < 1 ? 0 : Math.Clamp((NativeWideAxis(v, axisV) - NativeWideAxis(bottom, axisV)) / span, 0, 1);
+                            return v with
+                            {
+                                R = bottom.R + (top.R - bottom.R) * s, G = bottom.G + (top.G - bottom.G) * s,
+                                B = bottom.B + (top.B - bottom.B) * s,
+                            };
+                        }
                         // Copies move by the block's length; cells go in from the one
                         // landing next to the end, until a face is in the way.
                         var order = side > 0 ? block.OrderBy(e => e.U0).ToList() : [.. block.OrderByDescending(e => e.U0)];
@@ -364,10 +475,46 @@ public static partial class FramePacing
                             foreach (var cell in order)
                             {
                                 float lo = cell.U0 + offset, hi = cell.U1 + offset;
-                                if (!Free(plane, lo, hi, low, high)) { placed = false; break; }
+                                if (!Free(plane, lo, hi, low, high))
+                                {
+                                    // Cells of slightly different widths leave a crack of a few
+                                    // units before the face in the way: fill it with this copy
+                                    // squeezed to the gap.
+                                    if (spec.Skew > 2)
+                                    {
+                                        var inWay = span.Where(r => r.U0 < hi - spec.Skew && lo < r.U1 - spec.Skew
+                                            && r.V0 < high - skewV && low < r.V1 - skewV).ToList();
+                                        float stop = side > 0 ? inWay.Min(r => r.U0) : inWay.Max(r => r.U1);
+                                        float gap = side > 0 ? stop - lo : hi - stop;
+                                        if (gap > 0.5f && gap <= spec.Skew)
+                                            foreach (var r in cell.T)
+                                            {
+                                                NativeWideClipVertex Squeeze(NativeWideClipVertex v)
+                                                {
+                                                    v = Copy(v, offset);
+                                                    float u = NativeWideAxis(v, spec.U);
+                                                    return NativeWideMoved(v, spec.U, (side > 0 ? Math.Min(u, stop) : Math.Max(u, stop)) - u);
+                                                }
+                                                NativeWideClipVertex a = Squeeze(r.A), b = Squeeze(r.B), c = Squeeze(r.C);
+                                                if (Vector3.Cross(Position(b) - Position(a), Position(c) - Position(a)).Length() > 1)
+                                                    repairs.Add(new(r.Polygon, a, b, c));
+                                            }
+                                    }
+                                    placed = false;
+                                    break;
+                                }
                                 foreach (var r in cell.T)
-                                    repairs.Add(new(r.Polygon, NativeWideMoved(r.A, spec.U, offset),
-                                        NativeWideMoved(r.B, spec.U, offset), NativeWideMoved(r.C, spec.U, offset)));
+                                {
+                                    NativeWideClipVertex a = Copy(r.A, offset), b = Copy(r.B, offset), c = Copy(r.C, offset);
+                                    // Such a copy overlaps what it follows by a sliver: cut it
+                                    // at that edge, so the two do not fight in the depth test.
+                                    if (endLine)
+                                        foreach (var t in NativeWideClipToSide([a, b, c], spec.U, axisV,
+                                            NativeWideMoved(endA, spec.U, side * reached),
+                                            NativeWideMoved(endB, spec.U, side * reached), side))
+                                            repairs.Add(new(r.Polygon, t[0], t[1], t[2]));
+                                    else repairs.Add(new(r.Polygon, a, b, c));
+                                }
                                 span.Add((lo, hi, low, high));
                             }
                             if (!placed) break;

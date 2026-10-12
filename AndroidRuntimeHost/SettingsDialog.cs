@@ -103,6 +103,11 @@ static class SettingsDialog
             "Load Game restores the lives you had when you saved, like Crash 2 and 3. Off: every load starts with 4 lives, as in the original.",
             bodyFont));
 
+        var analogMovement = AddSwitch(activity, card, "Analog movement (left stick)", view.AnalogMovement, bodyBold);
+        card.AddView(Hint(activity,
+            "A gamepad left stick steers Crash in any direction, not only the 8 of the D-pad. Touch controls and D-pad are unchanged.",
+            bodyFont));
+
         if (gpuLabRequested != null)
         {
             card.AddView(Hint(activity, "Diagnostics", bodyBold), Margin(activity, top: 10, bottom: 2));
@@ -160,6 +165,7 @@ static class SettingsDialog
             view.Dejitter = dejitter.Checked;
             view.CrtFilter = crtFilter.Checked;
             view.SaveLives = saveLives.Checked;
+            view.AnalogMovement = analogMovement.Checked;
 
             ConfigManager.SaveGame();
             ConfigManager.SaveView(Array.Empty<RecompOne.Runtime.Host.Window.IPanel>());

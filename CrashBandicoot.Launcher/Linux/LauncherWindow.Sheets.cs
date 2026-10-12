@@ -261,6 +261,7 @@ sealed partial class LauncherWindow
         var scaledDither = Nav(new ThemeCheck("Scaled dither") { Checked = view.ScaledDither });
         var crtFilter = Nav(new ThemeCheck("CRT filter (MattiasCRT)") { Checked = view.CrtFilter });
         var saveLives = Nav(new ThemeCheck("Save lives to memory card") { Checked = view.SaveLives });
+        var analogMovement = Nav(new ThemeCheck("Analog movement (left stick)") { Checked = view.AnalogMovement });
 
         var strengthRow = Row(Label("Filter strength", 202), strength, 30);
         void SyncStrength() => strengthRow.IsVisible = ComboValue(texFilter, 0) != 0;
@@ -290,7 +291,9 @@ sealed partial class LauncherWindow
                 WithMargin(crtFilter, new Thickness(0, 0, 0, 14)),
                 Hint("Curved CRT TV look by Mattias Gustavsson: scanlines, glow, and a shadow mask."),
                 WithMargin(saveLives, new Thickness(0, 0, 0, 14)),
-                Hint("Load Game restores the lives you had when you saved, like Crash 2 and 3. Off: every load starts with 4 lives, as in the original.", 8),
+                Hint("Load Game restores the lives you had when you saved, like Crash 2 and 3. Off: every load starts with 4 lives, as in the original."),
+                WithMargin(analogMovement, new Thickness(0, 0, 0, 14)),
+                Hint("The gamepad left stick steers Crash in any direction, not only the 8 of the D-pad. D-pad and keyboard are unchanged.", 8),
             },
         };
 
@@ -310,6 +313,7 @@ sealed partial class LauncherWindow
             view.ScaledDither = scaledDither.Checked;
             view.CrtFilter = crtFilter.Checked;
             view.SaveLives = saveLives.Checked;
+            view.AnalogMovement = analogMovement.Checked;
             ConfigManager.SaveGame();
             SaveView();
             CloseSheet();
