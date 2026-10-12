@@ -1,3 +1,4 @@
+using RecompOne.Runtime.Host;
 using Silk.NET.SDL;
 
 namespace CrashBandicoot.Launcher.Ui;
@@ -44,6 +45,7 @@ internal unsafe sealed class LauncherGamepad : IDisposable
                 }
                 _ownSubsystem = true;
             }
+            GamepadMappings.Add(_sdl);
             Rescan();
             return true;
         }

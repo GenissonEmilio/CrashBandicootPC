@@ -95,6 +95,7 @@ internal static unsafe class InputManager
             _sdl = Sdl.GetApi();
             _sdl.SetHint("SDL_JOYSTICK_RAWINPUT", "0");
             _sdl.InitSubSystem(Sdl.InitGamecontroller);
+            GamepadMappings.Add(_sdl);
             Rescan();
         }
         catch { _sdl = null; }
