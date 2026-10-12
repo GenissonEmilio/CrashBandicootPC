@@ -25,6 +25,18 @@ public static class LibPad
         c.V0 = 0;
     }
 
+    internal static void SaveState(BinaryWriter w)
+    {
+        w.Write(_buf1);
+        w.Write(_buf2);
+    }
+
+    internal static void LoadState(BinaryReader r)
+    {
+        _buf1 = r.ReadUInt32();
+        _buf2 = r.ReadUInt32();
+    }
+
     public static void PadStartCom(CpuContext c, IMemory m) { Refresh(m); c.V0 = 0; }
     public static void PadStopCom(CpuContext c, IMemory m) { c.V0 = 0; }
     public static void PadEnableCom(CpuContext c, IMemory m) { c.V0 = 0; }

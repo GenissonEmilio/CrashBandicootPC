@@ -36,6 +36,34 @@ public sealed class PSMemory : IMemory
 
     public void SetCd(CdController cd) { _cd = cd; _dma.SetCd(cd); }
 
+    /// <summary>Save state: RAM, scratchpad, I/O registers and the devices this bus owns.</summary>
+    internal void SaveState(BinaryWriter w)
+    {
+        w.Write(_ram.Length);
+        w.Write(_ram);
+        w.Write(_scratchpad);
+        w.Write(_hwregs);
+        _dma.SaveState(w);
+        _timers.SaveState(w);
+        _gpu.SaveState(w);
+        _spu.SaveState(w);
+    }
+
+    internal void LoadState(BinaryReader r)
+    {
+        int ramLength = r.ReadInt32();
+        if (ramLength != _ram.Length)
+            throw new InvalidDataException($"save state RAM is {ramLength} bytes, this session has {_ram.Length}");
+        Host.SaveStates.ReadExactly(r, _ram);
+        Host.SaveStates.ReadExactly(r, _scratchpad);
+        Host.SaveStates.ReadExactly(r, _hwregs);
+        _dma.LoadState(r);
+        _timers.LoadState(r);
+        _gpu.LoadState(r);
+        _spu.LoadState(r);
+        _memYield = 65536;
+    }
+
     private static bool IsDmaChcr(uint phys) => phys >= 0x1F801080u && phys < 0x1F8010F0u && (phys & 0xFu) == 8u;
 
     private uint Hw32(uint phys)

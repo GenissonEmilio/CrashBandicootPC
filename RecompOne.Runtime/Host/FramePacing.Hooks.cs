@@ -382,7 +382,12 @@ public static partial class FramePacing
         return true;
     }
 
-    public static void PostGpuUpdate(CpuContext c, IMemory m) => FinishGpuUpdate(m);
+    public static void PostGpuUpdate(CpuContext c, IMemory m)
+    {
+        FinishGpuUpdate(m);
+        // Quick save / load (#130) only where the recompiled call chain is fixed.
+        SaveStates.AtSafePoint(c, m);
+    }
 
     public static bool PreNsInit(CpuContext c, IMemory m)
     {

@@ -45,6 +45,62 @@ public static class Gte
         return t;
     }
 
+    internal static void SaveState(BinaryWriter w)
+    {
+        foreach (short s in V) w.Write(s);
+        w.Write(RGBC_R); w.Write(RGBC_G); w.Write(RGBC_B); w.Write(RGBC_CODE);
+        w.Write(OTZ);
+        w.Write(IR0); w.Write(IR1); w.Write(IR2); w.Write(IR3);
+        foreach (short s in SX) w.Write(s);
+        foreach (short s in SY) w.Write(s);
+        foreach (ushort s in SZ) w.Write(s);
+        foreach (float f in SXf) w.Write(f);
+        foreach (float f in SYf) w.Write(f);
+        foreach (float f in SZf) w.Write(f);
+        foreach (bool b in SxyPrecise) w.Write(b);
+        foreach (uint u in RGB) w.Write(u);
+        w.Write(RES1);
+        w.Write(MAC0); w.Write(MAC1); w.Write(MAC2); w.Write(MAC3);
+        w.Write(LZCS); w.Write(LZCR);
+        foreach (short s in RT) w.Write(s);
+        foreach (short s in LLM) w.Write(s);
+        foreach (short s in LCM) w.Write(s);
+        foreach (int i in TR) w.Write(i);
+        foreach (int i in BK) w.Write(i);
+        foreach (int i in FC) w.Write(i);
+        w.Write(OFX); w.Write(OFY); w.Write(H);
+        w.Write(DQA); w.Write(DQB); w.Write(ZSF3); w.Write(ZSF4);
+        w.Write(FLAG);
+    }
+
+    internal static void LoadState(BinaryReader r)
+    {
+        for (int i = 0; i < V.Length; i++) V[i] = r.ReadInt16();
+        RGBC_R = r.ReadByte(); RGBC_G = r.ReadByte(); RGBC_B = r.ReadByte(); RGBC_CODE = r.ReadByte();
+        OTZ = r.ReadUInt16();
+        IR0 = r.ReadInt32(); IR1 = r.ReadInt32(); IR2 = r.ReadInt32(); IR3 = r.ReadInt32();
+        for (int i = 0; i < SX.Length; i++) SX[i] = r.ReadInt16();
+        for (int i = 0; i < SY.Length; i++) SY[i] = r.ReadInt16();
+        for (int i = 0; i < SZ.Length; i++) SZ[i] = r.ReadUInt16();
+        for (int i = 0; i < SXf.Length; i++) SXf[i] = r.ReadSingle();
+        for (int i = 0; i < SYf.Length; i++) SYf[i] = r.ReadSingle();
+        for (int i = 0; i < SZf.Length; i++) SZf[i] = r.ReadSingle();
+        for (int i = 0; i < SxyPrecise.Length; i++) SxyPrecise[i] = r.ReadBoolean();
+        for (int i = 0; i < RGB.Length; i++) RGB[i] = r.ReadUInt32();
+        RES1 = r.ReadUInt32();
+        MAC0 = r.ReadInt32(); MAC1 = r.ReadInt32(); MAC2 = r.ReadInt32(); MAC3 = r.ReadInt32();
+        LZCS = r.ReadUInt32(); LZCR = r.ReadUInt32();
+        for (int i = 0; i < RT.Length; i++) RT[i] = r.ReadInt16();
+        for (int i = 0; i < LLM.Length; i++) LLM[i] = r.ReadInt16();
+        for (int i = 0; i < LCM.Length; i++) LCM[i] = r.ReadInt16();
+        for (int i = 0; i < TR.Length; i++) TR[i] = r.ReadInt32();
+        for (int i = 0; i < BK.Length; i++) BK[i] = r.ReadInt32();
+        for (int i = 0; i < FC.Length; i++) FC[i] = r.ReadInt32();
+        OFX = r.ReadInt32(); OFY = r.ReadInt32(); H = r.ReadUInt16();
+        DQA = r.ReadInt16(); DQB = r.ReadInt32(); ZSF3 = r.ReadInt16(); ZSF4 = r.ReadInt16();
+        FLAG = r.ReadUInt32();
+    }
+
     static void Flag(int bit) => FLAG |= 1u << bit;
 
     static int SatIR(int n, int v, bool lm)

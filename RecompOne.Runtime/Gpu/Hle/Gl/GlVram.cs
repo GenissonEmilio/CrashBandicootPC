@@ -148,12 +148,14 @@ public sealed class GlVram
             _gl.PixelStore(PixelStoreParameter.PackAlignment, 1);
             _gl.ReadPixels<byte>(x, y, (uint)w, (uint)h, PixelFormat.Rgba,
                 PixelType.UnsignedByte, _transfer.AsSpan(0, count * 4));
+            // Round to nearest: WriteRect stores 5-bit v as v*255/31 (floored),
+            // so a floored read turned 1 into 0 and every round trip darkened.
             for (int i = 0; i < count; i++)
             {
                 int o = i * 4;
-                dst[i] = (ushort)((_transfer[o] * 31 / 255) |
-                    ((_transfer[o + 1] * 31 / 255) << 5) |
-                    ((_transfer[o + 2] * 31 / 255) << 10) |
+                dst[i] = (ushort)(((_transfer[o] * 31 + 127) / 255) |
+                    (((_transfer[o + 1] * 31 + 127) / 255) << 5) |
+                    (((_transfer[o + 2] * 31 + 127) / 255) << 10) |
                     (_transfer[o + 3] >= 128 ? 0x8000 : 0));
             }
         }

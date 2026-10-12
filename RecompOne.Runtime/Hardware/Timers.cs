@@ -47,6 +47,27 @@ public sealed class Timers
         return true;
     }
 
+    internal void SaveState(BinaryWriter w)
+    {
+        for (int t = 0; t < 3; t++)
+        {
+            w.Write(_mode[t]);
+            w.Write(_target[t]);
+        }
+    }
+
+    /// <summary>Counters are wall-clock driven: they restart from 0 at load.</summary>
+    internal void LoadState(BinaryReader r)
+    {
+        double now = _clock.Elapsed.TotalSeconds;
+        for (int t = 0; t < 3; t++)
+        {
+            _mode[t] = r.ReadUInt16();
+            _target[t] = r.ReadUInt16();
+            _resetT[t] = now;
+        }
+    }
+
     ushort CurrentValue(int t)
     {
         double elapsed = _clock.Elapsed.TotalSeconds - _resetT[t];

@@ -86,6 +86,9 @@ internal sealed class PauseMenuPopup : IPanel
         if (BookRow("Resume", "resume"))
             open = false;
 
+        if (Config.ConfigManager.View.SaveStates && DrawSaveStates())
+            open = false;
+
         // Pause stays open behind Settings so gameplay input stays muted; Esc closes Settings first.
         if (BookRow("Settings...", "settings")
             && PanelManager.Get<SettingsPopup>() is { } settings)
@@ -137,10 +140,47 @@ internal sealed class PauseMenuPopup : IPanel
         ImGui.Spacing();
         ImGui.Separator();
         ImGuiEx.TextDisabled("Toggle: Esc");
+        if (Config.ConfigManager.View.SaveStates)
+            ImGuiEx.TextDisabled("F5 save · F8 load · F6/F7 slot");
 
         IsOpen = open;
         ImGui.End();
         PopChrome();
+    }
+
+    /// <summary>Quick save rows (#130). True when an action should close the menu.</summary>
+    static bool DrawSaveStates()
+    {
+        int slot = SaveStates.Slot;
+        var info = SaveStates.GetInfo(slot);
+        bool close = false;
+
+        if (BookRow($"Save State (slot {slot})", "state-save"))
+        {
+            SaveStates.RequestSave(slot);
+            close = true;
+        }
+
+        bool canLoad = info is { Compatible: true };
+        if (!canLoad) ImGui.BeginDisabled();
+        if (BookRow($"Load State (slot {slot})", "state-load") && canLoad)
+        {
+            SaveStates.RequestLoad(slot);
+            close = true;
+        }
+        if (!canLoad) ImGui.EndDisabled();
+
+        ImGui.Indent();
+        if (ImGui.ArrowButton("##state-prev", ImGuiDir.Left)) SaveStates.StepSlot(-1);
+        ImGui.SameLine();
+        if (ImGui.ArrowButton("##state-next", ImGuiDir.Right)) SaveStates.StepSlot(1);
+        ImGui.SameLine();
+        ImGui.TextUnformatted($"Slot {slot}");
+        ImGui.PushTextWrapPos(0f);
+        ImGuiEx.TextDisabled(info?.Describe() ?? "Empty");
+        ImGui.PopTextWrapPos();
+        ImGui.Unindent();
+        return close;
     }
 
     static void DrawDim(ImGuiViewportPtr vp)

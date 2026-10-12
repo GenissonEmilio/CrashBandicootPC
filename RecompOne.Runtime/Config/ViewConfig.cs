@@ -313,6 +313,23 @@ public class ViewConfig
     }
 
     /// <summary>
+    /// Quick save / quick load (#130): F5 save, F8 load, F6/F7 slot, and the
+    /// pause menu entries. Off hides them all. On by default.
+    /// </summary>
+    public bool SaveStates
+    {
+        get => GetBool("SaveStates", true);
+        set => SetBool("SaveStates", value);
+    }
+
+    /// <summary>Selected quick save slot (1–<see cref="Host.SaveStates.SlotCount"/>).</summary>
+    public int SaveStateSlot
+    {
+        get => Math.Clamp(GetInt("SaveStateSlot", 1), 1, Host.SaveStates.SlotCount);
+        set => SetInt("SaveStateSlot", Math.Clamp(value, 1, Host.SaveStates.SlotCount));
+    }
+
+    /// <summary>
     /// Memory card saves keep the current lives and Load Game restores them (Crash 2/3
     /// style, #21). Off = original game: every load starts with 4 lives. On by default.
     /// </summary>

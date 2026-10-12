@@ -247,6 +247,7 @@ public sealed class LauncherHost : Form
                 ["cheatMenu"] = ConfigManager.View.CheatMenuKey,
             },
             frameRateHotkeys = ConfigManager.View.FrameRateHotkeys,
+            saveStates = ConfigManager.View.SaveStates,
         };
 
         Post(new { type = "state", state });
@@ -590,6 +591,8 @@ public sealed class LauncherHost : Form
         }
         if (root.TryGetProperty("frameRateHotkeys", out var fpsKeys))
             ConfigManager.View.FrameRateHotkeys = fpsKeys.ValueKind == JsonValueKind.True;
+        if (root.TryGetProperty("saveStates", out var stateKeys))
+            ConfigManager.View.SaveStates = stateKeys.ValueKind == JsonValueKind.True;
         ConfigManager.SaveGame();
         ConfigManager.SaveView(Array.Empty<RecompOne.Runtime.Host.Window.IPanel>());
         PushState();

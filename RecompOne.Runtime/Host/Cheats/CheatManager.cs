@@ -148,6 +148,15 @@ public static class CheatManager
         _bonusRound = bonusRound;
     }
 
+    /// <summary>Drops a queued warp (a loaded save state replaced the level it targeted).</summary>
+    public static void CancelWarp()
+    {
+        _warpPending = false;
+        _warpLoadLid = uint.MaxValue;
+        _bonusLid = uint.MaxValue;
+        _bonusArmed = false;
+    }
+
     /// <summary>BonoC layout of the current bonus round (GOOL BONUSROUND).</summary>
     public static bool TryGetBonusRound(out uint round)
     {

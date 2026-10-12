@@ -52,6 +52,8 @@ public static class AppPaths
     public static string InterfacePath => Path.Combine(Root, "interface.ini");
     public static string CardAPath => Path.Combine(SaveDir, "carda.sav");
     public static string CardBPath => Path.Combine(SaveDir, "cardb.sav");
+    /// <summary>Quick save slots (save/states/slotN.state).</summary>
+    public static string StatesDir => Path.Combine(SaveDir, "states");
 
     /// <summary>True when the exe lives on the Desktop (or inside a folder on the Desktop).</summary>
     public static bool IsOnDesktop

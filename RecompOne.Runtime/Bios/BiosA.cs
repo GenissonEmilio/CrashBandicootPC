@@ -466,6 +466,50 @@ public static class BiosA
         }
     }
 
+    /// <summary>A memory card file is open: the game is mid save/load on the card.</summary>
+    internal static bool CardFileOpen => _cardFiles.Count > 0;
+
+    /// <summary>Save state: kernel heap and rand. Open files stay with the session.</summary>
+    internal static void SaveState(BinaryWriter w)
+    {
+        w.Write(_heapBase);
+        w.Write(_heapEnd);
+        WriteBlocks(w, _free);
+        WriteBlocks(w, _busy);
+        w.Write(_randSeed);
+        w.Write(_strtokPtr);
+    }
+
+    internal static void LoadState(BinaryReader r)
+    {
+        _heapBase = r.ReadUInt32();
+        _heapEnd = r.ReadUInt32();
+        ReadBlocks(r, _free);
+        ReadBlocks(r, _busy);
+        _randSeed = r.ReadUInt32();
+        _strtokPtr = r.ReadUInt32();
+        // Handles into the card belong to the RAM that was just replaced.
+        _cardFiles.Clear();
+    }
+
+    static void WriteBlocks(BinaryWriter w, IDictionary<uint, uint> blocks)
+    {
+        w.Write(blocks.Count);
+        foreach (var (addr, value) in blocks)
+        {
+            w.Write(addr);
+            w.Write(value);
+        }
+    }
+
+    static void ReadBlocks(BinaryReader r, IDictionary<uint, uint> blocks)
+    {
+        blocks.Clear();
+        int n = r.ReadInt32();
+        for (int i = 0; i < n; i++)
+            blocks[r.ReadUInt32()] = r.ReadUInt32();
+    }
+
     static void InitHeap(uint ubase, uint size) //why is base a reserved keyword?
     {
         _heapBase = ubase;

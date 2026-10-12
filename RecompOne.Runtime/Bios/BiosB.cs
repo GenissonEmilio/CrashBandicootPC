@@ -25,6 +25,41 @@ public static class BiosB
     static bool _cardFlagNewA = true;
     static bool _cardFlagNewB = true;
 
+    /// <summary>Save state: events, threads, interrupt chain, pad buffer and card status.</summary>
+    internal static void SaveState(BinaryWriter w)
+    {
+        foreach (var e in _evCBs)
+        {
+            w.Write(e.Status); w.Write(e.Class); w.Write(e.Spec); w.Write(e.Mode); w.Write(e.Func);
+        }
+        foreach (var t in _tcbs) w.Write(t.Used);
+        foreach (uint link in _intChain) w.Write(link);
+        w.Write(IntrEnvInInterruptAddr);
+        w.Write(_padBuf);
+        w.Write(_cardChan);
+        w.Write(_cardStatus);
+        w.Write(_cardFlagNewA);
+        w.Write(_cardFlagNewB);
+    }
+
+    internal static void LoadState(BinaryReader r)
+    {
+        for (int i = 0; i < _evCBs.Length; i++)
+            _evCBs[i] = new EvCB
+            {
+                Status = r.ReadUInt32(), Class = r.ReadUInt32(), Spec = r.ReadUInt32(),
+                Mode = r.ReadUInt32(), Func = r.ReadUInt32(),
+            };
+        for (int i = 0; i < _tcbs.Length; i++) _tcbs[i].Used = r.ReadBoolean();
+        for (int i = 0; i < _intChain.Length; i++) _intChain[i] = r.ReadUInt32();
+        IntrEnvInInterruptAddr = r.ReadUInt32();
+        _padBuf = r.ReadUInt32();
+        _cardChan = r.ReadUInt32();
+        _cardStatus = r.ReadUInt32();
+        _cardFlagNewA = r.ReadBoolean();
+        _cardFlagNewB = r.ReadBoolean();
+    }
+
     public static void DeliverEvent(uint @class, uint spec)
     {
         for (int i = 0; i < MaxEvents; i++)

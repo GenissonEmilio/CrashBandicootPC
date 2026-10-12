@@ -39,9 +39,14 @@ internal static unsafe class InputManager
     static bool _cheatMenuToggle;
     static bool _pauseMenuToggle;
     static int _frameRateIndex = -1;
+    static SaveStateKey _saveStateKey;
     static readonly HashSet<Key> _keysDown = [];
 
-    
+    /// <summary>Quick save hotkeys (#130): F5 save, F6/F7 slot, F8 load.</summary>
+    public enum SaveStateKey { None, Save, PreviousSlot, NextSlot, Load }
+
+    public static SaveStateKey ConsumeSaveStateKey() { var v = _saveStateKey; _saveStateKey = SaveStateKey.None; return v; }
+
     public static bool ConsumeTopBarToggle() { var v = _topBarToggle; _topBarToggle = false; return v; }
     public static bool ConsumeFullscreenToggle(){ var v = _fullscreenToggle; _fullscreenToggle = false; return v; }
     public static bool ConsumeSessionMarker() { var v = _sessionMarker; _sessionMarker = false; return v; }
@@ -146,6 +151,7 @@ internal static unsafe class InputManager
         PollCheatMenuHotkey();
         PollPauseMenuHotkey();
         PollFrameRateHotkeys();
+        PollSaveStateHotkeys();
         PollGamepadEvents();
         PollKeyboard();
         PollGamepads();
@@ -162,7 +168,9 @@ internal static unsafe class InputManager
     static bool _asyncCheatMenu;
     static bool _asyncPauseMenu;
     static readonly bool[] _asyncFrameRate = new bool[5];
+    static readonly bool[] _asyncSaveState = new bool[4];
     const int VkF1 = 0x70;
+    const int VkF5 = 0x74;
     const int VkF11 = 0x7A;
     const int VkShift = 0x10;
     const int VkControl = 0x11;
@@ -224,6 +232,35 @@ internal static unsafe class InputManager
             _asyncFrameRate[i] = down;
         }
     }
+
+    /// <summary>
+    /// The launcher keeps focus on its WinForms parent, so the embedded game reads
+    /// F5–F8 with GetAsyncKeyState. Everywhere else Silk's KeyDown does it — never
+    /// both, or one press would step two slots.
+    /// </summary>
+    static bool SaveStateKeysAsync => OperatingSystem.IsWindows() && HostWindow.IsEmbedded;
+
+    static void PollSaveStateHotkeys()
+    {
+        if (!SaveStateKeysAsync) return;
+        bool active = HostWindow.IsInputActive && ConfigManager.View.SaveStates;
+        for (int i = 0; i < _asyncSaveState.Length; i++)
+        {
+            bool down = AsyncDown(VkF5 + i);
+            if (active && down && !_asyncSaveState[i])
+                _saveStateKey = (SaveStateKey)(i + 1);
+            _asyncSaveState[i] = down;
+        }
+    }
+
+    static SaveStateKey SaveStateKeyFrom(Key key) => key switch
+    {
+        Key.F5 => SaveStateKey.Save,
+        Key.F6 => SaveStateKey.PreviousSlot,
+        Key.F7 => SaveStateKey.NextSlot,
+        Key.F8 => SaveStateKey.Load,
+        _ => SaveStateKey.None,
+    };
 
     static bool AsyncDown(int vk) => (GetAsyncKeyState(vk) & 0x8000) != 0;
 
@@ -493,6 +530,9 @@ internal static unsafe class InputManager
         if (key == Key.F11) _fullscreenToggle = true;
         if (key == Key.Escape) _pauseMenuToggle = true;
         if (key == ResolveCheatMenuKey()) _cheatMenuToggle = true;
+        if (!SaveStateKeysAsync && ConfigManager.View.SaveStates && SaveStateKeyFrom(key) is var stateKey
+            && stateKey != SaveStateKey.None)
+            _saveStateKey = stateKey;
         if (ConfigManager.View.FrameRateHotkeys && !HostModifierDown())
         {
             int fps = FrameRateIndexFromKey(key);

@@ -29,6 +29,9 @@ public sealed class Dma
 
     public uint ReadDicr() => _dicr;
 
+    internal void SaveState(BinaryWriter w) => w.Write(_dicr);
+    internal void LoadState(BinaryReader r) => _dicr = r.ReadUInt32();
+
     public void WriteDicr(uint val)
     {
         uint flags = (_dicr >> 24) & 0x7Fu;

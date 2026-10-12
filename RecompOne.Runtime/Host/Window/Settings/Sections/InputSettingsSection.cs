@@ -74,6 +74,7 @@ internal sealed class InputSettingsSection : ISettingsSection
                 else ConfigManager.Game.Keys2 = KeyBindings.Empty();
                 ConfigManager.View.CheatMenuKey = "F3";
                 ConfigManager.View.FrameRateHotkeys = true;
+                ConfigManager.View.SaveStates = true;
                 ConfigManager.SaveView(PanelManager.Panels);
             }
             else
@@ -252,8 +253,20 @@ internal sealed class InputSettingsSection : ISettingsSection
             ConfigManager.SaveView(PanelManager.Panels);
         }
 
+        ImGui.TableNextRow();
+        ImGui.TableSetColumnIndex(0);
+        ImGui.TextUnformatted("Quick save F5–F8");
+        ImGui.TableSetColumnIndex(1);
+        bool saveStates = ConfigManager.View.SaveStates;
+        if (ImGui.Checkbox("Enabled##saveStates", ref saveStates))
+        {
+            ConfigManager.View.SaveStates = saveStates;
+            ConfigManager.SaveView(PanelManager.Panels);
+        }
+
         ImGui.EndTable();
         ImGuiEx.TextDisabled("1 original, 2 60, 3 120, 4 240, 5 uncapped");
+        ImGuiEx.TextDisabled("F5 save state, F8 load, F6/F7 slot (also in the pause menu)");
     }
 
     static void DrawAnalogMovement()

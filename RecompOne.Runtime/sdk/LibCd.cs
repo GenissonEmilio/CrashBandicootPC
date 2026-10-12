@@ -254,6 +254,32 @@ public static class LibCd
     public static void CdLastCom(CpuContext c, IMemory m) => c.V0 = _com;
     public static void CdMix(CpuContext c, IMemory m) => c.V0 = 1;
 
+    /// <summary>Save state: drive position, mode, callbacks and the read in progress.</summary>
+    internal static void SaveState(BinaryWriter w)
+    {
+        w.Write(_status); w.Write(_mode); w.Write(_com);
+        lock (_posGate) w.Write(_pos);
+        w.Write(_lastResult);
+        w.Write(_lastIntr);
+        w.Write(_cbSync); w.Write(_cbReady); w.Write(_cbData);
+        w.Write(_readActive); w.Write(_xaActive);
+        w.Write(_filterFile); w.Write(_filterChannel);
+    }
+
+    internal static void LoadState(BinaryReader r)
+    {
+        _status = r.ReadByte(); _mode = r.ReadByte(); _com = r.ReadByte();
+        lock (_posGate) Host.SaveStates.ReadExactly(r, _pos);
+        Host.SaveStates.ReadExactly(r, _lastResult);
+        _lastIntr = r.ReadInt32();
+        _cbSync = r.ReadUInt32(); _cbReady = r.ReadUInt32(); _cbData = r.ReadUInt32();
+        _readActive = r.ReadBoolean(); _xaActive = r.ReadBoolean();
+        _filterFile = r.ReadByte(); _filterChannel = r.ReadByte();
+        Dispatcher.ClearPending();
+        XaAudio.Reset();
+        if (_readActive) EnsureXaThread();
+    }
+
     static void CdResetState()
     {
         LibCdStream.OnStopStream();

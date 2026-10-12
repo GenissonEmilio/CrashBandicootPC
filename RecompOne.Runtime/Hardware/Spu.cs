@@ -346,6 +346,71 @@ public sealed class Spu
         }
     }
 
+    /// <summary>Save state: SPU RAM, registers and every voice mid-sample.</summary>
+    internal void SaveState(BinaryWriter w)
+    {
+        lock (_sync)
+        {
+            w.Write(Ram);
+            foreach (var v in _v)
+            {
+                w.Write(v.VolL); w.Write(v.VolR); w.Write(v.Pitch);
+                w.Write(v.StartAddr); w.Write(v.RepeatAddr);
+                w.Write(v.AdsrLo); w.Write(v.AdsrHi); w.Write(v.AdsrVol);
+                w.Write(v.CurAddr); w.Write(v.PitchCounter);
+                w.Write((int)v.Phase); w.Write(v.AdsrCycleCount);
+                w.Write(v.EndX); w.Write(v.IgnoreLoop); w.Write(v.HasBlock);
+                w.Write(v.Old); w.Write(v.Older);
+                w.Write(v.CurVolL); w.Write(v.CurVolR); w.Write(v.VolCycL); w.Write(v.VolCycR);
+                foreach (short s in v.Buf) w.Write(s);
+            }
+            w.Write(_mainVolL); w.Write(_mainVolR);
+            w.Write(_mainCurL); w.Write(_mainCurR); w.Write(_mainCycL); w.Write(_mainCycR);
+            w.Write(_reverbVolL); w.Write(_reverbVolR);
+            w.Write(_kon); w.Write(_konHi); w.Write(_koff); w.Write(_koffHi);
+            w.Write(_pmon); w.Write(_pmonHi); w.Write(_non); w.Write(_nonHi);
+            w.Write(_eon); w.Write(_eonHi);
+            w.Write(_endx);
+            w.Write(_spucnt); w.Write(_transferAddr); w.Write(_transferCtrl);
+            w.Write(_cdVolL); w.Write(_cdVolR); w.Write(_extVolL); w.Write(_extVolR);
+            w.Write(_reverbStartAddr);
+            w.Write(_noiseLevel); w.Write(_noiseTimer);
+        }
+    }
+
+    internal void LoadState(BinaryReader r)
+    {
+        lock (_sync)
+        {
+            Host.SaveStates.ReadExactly(r, Ram);
+            foreach (var v in _v)
+            {
+                v.VolL = r.ReadUInt16(); v.VolR = r.ReadUInt16(); v.Pitch = r.ReadUInt16();
+                v.StartAddr = r.ReadUInt16(); v.RepeatAddr = r.ReadUInt16();
+                v.AdsrLo = r.ReadUInt16(); v.AdsrHi = r.ReadUInt16(); v.AdsrVol = r.ReadInt16();
+                v.CurAddr = r.ReadUInt32(); v.PitchCounter = r.ReadUInt32();
+                v.Phase = (AdsrPhase)r.ReadInt32(); v.AdsrCycleCount = r.ReadInt32();
+                v.EndX = r.ReadBoolean(); v.IgnoreLoop = r.ReadBoolean(); v.HasBlock = r.ReadBoolean();
+                v.Old = r.ReadInt32(); v.Older = r.ReadInt32();
+                v.CurVolL = r.ReadInt16(); v.CurVolR = r.ReadInt16();
+                v.VolCycL = r.ReadInt32(); v.VolCycR = r.ReadInt32();
+                for (int i = 0; i < v.Buf.Length; i++) v.Buf[i] = r.ReadInt16();
+            }
+            _mainVolL = r.ReadUInt16(); _mainVolR = r.ReadUInt16();
+            _mainCurL = r.ReadInt16(); _mainCurR = r.ReadInt16();
+            _mainCycL = r.ReadInt32(); _mainCycR = r.ReadInt32();
+            _reverbVolL = r.ReadUInt16(); _reverbVolR = r.ReadUInt16();
+            _kon = r.ReadUInt16(); _konHi = r.ReadUInt16(); _koff = r.ReadUInt16(); _koffHi = r.ReadUInt16();
+            _pmon = r.ReadUInt16(); _pmonHi = r.ReadUInt16(); _non = r.ReadUInt16(); _nonHi = r.ReadUInt16();
+            _eon = r.ReadUInt16(); _eonHi = r.ReadUInt16();
+            _endx = r.ReadUInt32();
+            _spucnt = r.ReadUInt16(); _transferAddr = r.ReadUInt16(); _transferCtrl = r.ReadUInt16();
+            _cdVolL = r.ReadUInt16(); _cdVolR = r.ReadUInt16(); _extVolL = r.ReadUInt16(); _extVolR = r.ReadUInt16();
+            _reverbStartAddr = r.ReadUInt16();
+            _noiseLevel = r.ReadInt32(); _noiseTimer = r.ReadInt32();
+        }
+    }
+
     public void DmaWrite(uint spuByteAddr, ReadOnlySpan<byte> data)
     {
         lock (_sync)

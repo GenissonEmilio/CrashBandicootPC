@@ -287,11 +287,11 @@ public static partial class FramePacing
     // above 2, cell lengths are measured along their edges. A run continues
     // towards +U only if it reaches MinEnd. MinCover: how much of its height
     // the plane's faces must really cover (the sides of two ledges far apart
-    // share a plane as tall as a wall).
+    // share a plane as tall as a wall). EdgeFade: see the copies' colours.
     readonly record struct NativeWideRows(int Normal, int U, bool Low, bool High, float Extend, float MinBlock,
         float MinHeight, float MinLength, float MinRun = float.PositiveInfinity, float MinRowHeight = 0,
         float MinThickness = 0, bool EdgeColour = false, float Skew = 2, float MinEnd = float.NegativeInfinity,
-        float MinCover = 0);
+        float MinCover = 0, float EdgeFade = 0);
 
     static float NativeWideAxis(NativeWideClipVertex v, int axis) => axis == 0 ? v.X : axis == 1 ? v.Y : v.Z;
 
@@ -466,17 +466,40 @@ public static partial class FramePacing
                         endLine &= NativeWideAxis(endB, axisV) - NativeWideAxis(endA, axisV) > 1;
                         var bottom = shade ? edge.MinBy(v => NativeWideAxis(v, axisV)) : default;
                         var top = shade ? edge.MaxBy(v => NativeWideAxis(v, axisV)) : default;
+                        // EdgeFade: within that distance the copies return to the colours
+                        // of the end cell's inner edge, so a wall lit differently at its
+                        // very end (a shaft's front) does not change colour for good. Not
+                        // towards an inner edge much brighter (a brazier's glow).
+                        float innerU = side > 0 ? endCell.U0 : endCell.U1;
+                        var inner = endCell.T.SelectMany(r => new[] { r.A, r.B, r.C })
+                            .Where(v => Math.Abs(NativeWideAxis(v, spec.U) - innerU) <= 16).ToList();
+                        bool fade = shade && spec.EdgeFade > 0 && inner.Count > 0;
+                        var innerBottom = fade ? inner.MinBy(v => NativeWideAxis(v, axisV)) : default;
+                        var innerTop = fade ? inner.MaxBy(v => NativeWideAxis(v, axisV)) : default;
+                        static float Bright(NativeWideClipVertex v) => v.R + v.G + v.B;
+                        fade &= Bright(innerBottom) <= Bright(bottom) * 1.25f + 8 && Bright(innerTop) <= Bright(top) * 1.25f + 8;
                         NativeWideClipVertex Copy(NativeWideClipVertex v, float offset)
                         {
                             v = NativeWideMoved(v, spec.U, offset);
                             if (!shade) return v;
-                            float span = NativeWideAxis(top, axisV) - NativeWideAxis(bottom, axisV);
-                            float s = span < 1 ? 0 : Math.Clamp((NativeWideAxis(v, axisV) - NativeWideAxis(bottom, axisV)) / span, 0, 1);
-                            return v with
+                            // Where v lies between two edge corners across the row, 0 to 1.
+                            float Across(NativeWideClipVertex lo, NativeWideClipVertex hi)
                             {
-                                R = bottom.R + (top.R - bottom.R) * s, G = bottom.G + (top.G - bottom.G) * s,
-                                B = bottom.B + (top.B - bottom.B) * s,
-                            };
+                                float extent = NativeWideAxis(hi, axisV) - NativeWideAxis(lo, axisV);
+                                return extent < 1 ? 0 : Math.Clamp((NativeWideAxis(v, axisV) - NativeWideAxis(lo, axisV)) / extent, 0, 1);
+                            }
+                            float s = Across(bottom, top);
+                            float red = bottom.R + (top.R - bottom.R) * s, green = bottom.G + (top.G - bottom.G) * s,
+                                blue = bottom.B + (top.B - bottom.B) * s;
+                            if (fade)
+                            {
+                                float si = Across(innerBottom, innerTop);
+                                float back = Math.Clamp(side * (NativeWideAxis(v, spec.U) - endU) / spec.EdgeFade, 0, 1);
+                                red += (innerBottom.R + (innerTop.R - innerBottom.R) * si - red) * back;
+                                green += (innerBottom.G + (innerTop.G - innerBottom.G) * si - green) * back;
+                                blue += (innerBottom.B + (innerTop.B - innerBottom.B) * si - blue) * back;
+                            }
+                            return v with { R = red, G = green, B = blue };
                         }
                         // Copies move by the block's length; cells go in from the one
                         // landing next to the end, until a face is in the way.

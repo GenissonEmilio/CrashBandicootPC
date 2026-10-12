@@ -28,16 +28,6 @@ public static partial class FramePacing
         // ends at absolute X 151200 against the sky: its back wall copies stop there.
         if (x == 158400)
             repairs.RemoveAll(r => Math.Min(r.A.X, Math.Min(r.B.X, r.C.X)) < 151200 - x);
-        // The second shaft's ledges and floors (g) end at its right wall
-        // (absolute X 117200); continued through it they stick out of the
-        // wall's continuation. Its back wall (Z 0) goes on behind it.
-        if (x == 113200)
-        {
-            float back = -(int)m.ReadU32(world.Header + 8);
-            repairs.RemoveAll(r => Math.Min(r.A.X, Math.Min(r.B.X, r.C.X)) >= 117184 - x
-                && Math.Max(r.A.X, Math.Max(r.B.X, r.C.X)) > 117216 - x
-                && !(r.A.Z == back && r.B.Z == back && r.C.Z == back));
-        }
         // The walkway outside and the temple's front end at absolute X 100400,
         // before the pools (the 4:3 view shows nothing beyond): nothing of
         // them continues west of it.
@@ -46,25 +36,63 @@ public static partial class FramePacing
             repairs.RemoveAll(r => Math.Max(r.A.X, Math.Max(r.B.X, r.C.X)) <= 100416 - x);
             NativeWideSunsetCopies(m, world, faces, NativeWideSunsetWalkwayCopies, repairs, snap: false);
         }
-        // The shafts' outer walls (absolute X): the first two shafts' shared
-        // left wall, the second shaft's right wall and both walls of the third.
+        // At the third shaft's top (n) the right wall steps in from X 162795
+        // to 161995 above Y -14801 (a 400 step at X 162395): too low to count
+        // as walls, so the ending's forest showed past the step's culled near
+        // end. The step's faces (sides and tops) continue towards the camera
+        // like the walls, keeping their true depth.
+        if (x == 151235)
+        {
+            var step = new List<NativeWideRepair>();
+            NativeWideRowRepairs(faces, NativeWideSunsetStepRows, step);
+            float y = (int)m.ReadU32(world.Header + 4);
+            bool InStep(NativeWideClipVertex v) => v.X >= 161980 - x && v.X <= 162810 - x
+                && v.Y >= -14810 - y && v.Y <= -11300 - y;
+            foreach (var r in step)
+                if (InStep(r.A) && InStep(r.B) && InStep(r.C)) repairs.Add(r with { Boundary = true });
+        }
+        // The shafts' outer walls (absolute X, side the outside lies on): the
+        // first shaft's (meshes f and g), the second shaft's right wall and the
+        // third shaft's (its upper mesh, n, has them 5 units to the left).
         // Rooms, rooftops and forest lie beyond them, so their continuations
         // keep their true depth and hide them. A half cell completed over a
         // skewed neighbour stays behind (in depth it would fight that face).
-        int[] outerWalls = x switch
+        // Ledges, floors and fronts continued along X stop at the right walls
+        // (outside them lies only the exterior): through them they stuck out
+        // wherever the wall's continuation has a gap (the first shaft's
+        // alcove, the third shaft's big ledges). The back wall (Z 0) goes on
+        // behind them; continuations above and below a wall (the exit at the
+        // third shaft's top) stay, as does everything beyond the left walls,
+        // where the entrances and the corridor between the shafts lie.
+        (int X, int Side)[] outerWalls = x switch
         {
-            110000 or 113200 => [111200],
-            81600 => [88800],
-            158400 => [156400, 162800],
+            110000 => [(111200, -1)],
+            113200 => [(111200, -1), (117200, 1)],
+            81600 => [(88800, 1)],
+            158400 => [(156400, -1), (162800, 1)],
+            151235 => [(156395, -1), (162795, 1)],
             _ => [],
         };
-        foreach (int wall in outerWalls)
+        float back = -(int)m.ReadU32(world.Header + 8);
+        foreach (var (wall, side) in outerWalls)
         {
             float outerWall = wall - x;
             bool OnWall(NativeWideClipVertex v) => Math.Abs(v.X - outerWall) <= 16;
             var retail = new NativeWideTriangleGrid();
+            float low = float.MaxValue, high = float.MinValue;
             foreach (var f in faces)
-                if (f.Valid && f.T.All(OnWall)) retail.Add(f.T);
+                if (f.Valid && f.T.All(OnWall))
+                {
+                    retail.Add(f.T);
+                    foreach (var v in f.T) (low, high) = (Math.Min(low, v.Y), Math.Max(high, v.Y));
+                }
+            bool Beyond(NativeWideClipVertex v) => side * (v.X - outerWall) >= -16;
+            if (side > 0)
+                repairs.RemoveAll(r => Beyond(r.A) && Beyond(r.B) && Beyond(r.C)
+                    && !(OnWall(r.A) && OnWall(r.B) && OnWall(r.C))
+                    && !(r.A.Z == back && r.B.Z == back && r.C.Z == back)
+                    && Math.Min(r.A.Y, Math.Min(r.B.Y, r.C.Y)) >= low - 100
+                    && Math.Max(r.A.Y, Math.Max(r.B.Y, r.C.Y)) <= high + 100);
             for (int i = 0; i < repairs.Count; i++)
             {
                 var r = repairs[i];
@@ -324,22 +352,33 @@ public static partial class FramePacing
     // (ledges, slabs) on the walls. The shafts' bases (statue fronts and their
     // floors) also stop at the outer walls, and the lowest side wall rows are
     // only two cells deep. The sides of braziers' slabs on one wall share
-    // an X plane as tall as a wall, but cover little of it.
+    // an X plane as tall as a wall, but cover little of it. The side walls'
+    // front edges are lit blue: their copies fade back to the wall's own
+    // colour within a cell instead of staying blue.
     static readonly NativeWideRows[] NativeWideSunsetRows =
     [
         new(0, 2, Low: false, High: true, Extend: 4800, MinBlock: 1200, MinHeight: 4800, MinLength: 400, MinRun: 400,
-            EdgeColour: true, Skew: 16, MinEnd: 1500, MinCover: 2400),
+            EdgeColour: true, Skew: 16, MinEnd: 1500, MinCover: 2400, EdgeFade: 400),
         new(2, 0, Low: true, High: true, Extend: 3200, MinBlock: 800, MinHeight: 800, MinLength: 800,
             MinRowHeight: 300, EdgeColour: true, Skew: 16),
         new(1, 0, Low: true, High: true, Extend: 3200, MinBlock: 800, MinHeight: 400, MinLength: 800,
             MinThickness: 300, EdgeColour: true, Skew: 16),
     ];
 
+    // The third shaft's top step: X and Y planes of any size, towards +Z.
+    static readonly NativeWideRows[] NativeWideSunsetStepRows =
+    [
+        new(0, 2, Low: false, High: true, Extend: 4800, MinBlock: 400, MinHeight: 400, MinLength: 400, MinRun: 400,
+            EdgeColour: true, Skew: 16),
+        new(1, 2, Low: false, High: true, Extend: 4800, MinBlock: 400, MinHeight: 400, MinLength: 400, MinRun: 400,
+            EdgeColour: true, Skew: 16),
+    ];
+
     // On the rooftops only tall walls continue.
     static readonly NativeWideRows[] NativeWideSunsetRoofRows =
     [
         new(0, 2, Low: false, High: true, Extend: 4800, MinBlock: 1200, MinHeight: 4800, MinLength: 400, MinRun: 400,
-            EdgeColour: true, Skew: 16, MinEnd: 1500, MinCover: 2400),
+            EdgeColour: true, Skew: 16, MinEnd: 1500, MinCover: 2400, EdgeFade: 400),
         new(2, 0, Low: true, High: true, Extend: 3200, MinBlock: 800, MinHeight: 1600, MinLength: 1600,
             MinRowHeight: 300, EdgeColour: true, Skew: 16),
     ];

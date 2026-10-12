@@ -226,6 +226,7 @@ internal static class HostWindow
         _ramTask = null;
         _ramReady = false;
         _ramFrame = 0;
+        SaveStates.CancelRequests();
     }
 
     static void TryEmbedIntoParent(nint parent)
@@ -313,6 +314,18 @@ internal static class HostWindow
             && !ImGuiWantsTextInput()
             && FrameRateSetting.TryApplyIndex(fpsIndex))
             DevHudOverlay.Flash(ViewConfig.FrameRateLabels[fpsIndex]);
+        if (ConfigManager.View.SaveStates)
+        {
+            switch (InputManager.ConsumeSaveStateKey())
+            {
+                case InputManager.SaveStateKey.Save: SaveStates.RequestSave(SaveStates.Slot); break;
+                case InputManager.SaveStateKey.Load: SaveStates.RequestLoad(SaveStates.Slot); break;
+                case InputManager.SaveStateKey.PreviousSlot: SaveStates.StepSlot(-1); break;
+                case InputManager.SaveStateKey.NextSlot: SaveStates.StepSlot(1); break;
+            }
+        }
+        else
+            InputManager.ConsumeSaveStateKey();
         // Mute must survive BiosB.PadRead's late Poll — applied via ApplyOverlay.
         ExitToMapInjector.MuteGameplay =
             PanelManager.Get<PauseMenuPopup>()?.IsOpen == true && !ExitToMapInjector.Active;

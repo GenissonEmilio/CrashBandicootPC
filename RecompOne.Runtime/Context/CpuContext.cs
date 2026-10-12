@@ -59,4 +59,20 @@ public sealed class CpuContext
         HI = s.hi;
         LO = s.lo;
     }
+
+    internal void SaveState(BinaryWriter w)
+    {
+        foreach (uint r in _gpr) w.Write(r);
+        w.Write(HI); w.Write(LO);
+        w.Write(SR); w.Write(Cause); w.Write(EPC); w.Write(BadVAddr); w.Write(PRId);
+    }
+
+    internal void LoadState(BinaryReader r)
+    {
+        for (int i = 0; i < _gpr.Length; i++) _gpr[i] = r.ReadUInt32();
+        _gpr[0] = 0;
+        HI = r.ReadUInt32(); LO = r.ReadUInt32();
+        SR = r.ReadUInt32(); Cause = r.ReadUInt32(); EPC = r.ReadUInt32();
+        BadVAddr = r.ReadUInt32(); PRId = r.ReadUInt32();
+    }
 }

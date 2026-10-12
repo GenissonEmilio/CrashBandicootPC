@@ -203,6 +203,11 @@ sealed partial class LauncherWindow
         body.Children.Add(WithMargin(fpsKeys, new Thickness(0, 8, 0, 4)));
         body.Children.Add(Hint("1 original, 2 60, 3 120, 4 240, 5 uncapped. Uncheck to free those keys.", 0));
 
+        var stateKeys = new ThemeCheck("Quick save F5–F8") { Checked = ConfigManager.View.SaveStates };
+        nav.Add(stateKeys);
+        body.Children.Add(WithMargin(stateKeys, new Thickness(0, 8, 0, 4)));
+        body.Children.Add(Hint("F5 save state, F8 load, F6/F7 slot. Also in the Esc pause menu.", 0));
+
         var save = new ThemeButton("Save", primary: true);
         save.Click += (_, _) =>
         {
@@ -221,6 +226,7 @@ sealed partial class LauncherWindow
             if (!string.IsNullOrWhiteSpace(cheatKey))
                 ConfigManager.View.CheatMenuKey = cheatKey;
             ConfigManager.View.FrameRateHotkeys = fpsKeys.Checked;
+            ConfigManager.View.SaveStates = stateKeys.Checked;
             ConfigManager.SaveGame();
             SaveView();
             CloseSheet();

@@ -105,6 +105,7 @@ public sealed class NativeLauncherUi : UserControl, ILauncherUi
     ThemeCheck? _cheatGod;
     ThemeCheck? _cheatFly;
     ThemeCheck? _frameRateHotkeys;
+    ThemeCheck? _saveStates;
     readonly Dictionary<string, ThemeCheck> _modChecks = new(StringComparer.OrdinalIgnoreCase);
     JsonElement _pendingDiscoveredMods;
 
@@ -302,6 +303,7 @@ public sealed class NativeLauncherUi : UserControl, ILauncherUi
         SetCheck(_cheatGod, state, "godMode");
         SetCheck(_cheatFly, state, "fly");
         SetCheck(_frameRateHotkeys, state, "frameRateHotkeys");
+        SetCheck(_saveStates, state, "saveStates");
 
         if (state.TryGetProperty("discoveredMods", out var dm))
             _pendingDiscoveredMods = dm.Clone();
@@ -1318,11 +1320,15 @@ public sealed class NativeLauncherUi : UserControl, ILauncherUi
         _frameRateHotkeys.Location = new Point(36, y);
         _frameRateHotkeys.Checked = true;
         card.Controls.Add(_frameRateHotkeys);
+        _saveStates = MakeCheck("Quick save F5–F8");
+        _saveStates.Location = new Point(300, y);
+        _saveStates.Checked = true;
+        card.Controls.Add(_saveStates);
         y += 32;
         card.Controls.Add(BodyLabel(
-            "1 original, 2 60, 3 120, 4 240, 5 uncapped. Uncheck to free those keys.",
-            new Point(36, y), 500, 36));
-        y += 40;
+            "1 original, 2 60, 3 120, 4 240, 5 uncapped. F5 save state, F8 load, F6/F7 slot. Uncheck to free those keys.",
+            new Point(36, y), 500, 44));
+        y += 48;
 
         var save = MakePrimaryBtn("Save");
         save.Location = new Point(36, y + 10);
@@ -1331,7 +1337,13 @@ public sealed class NativeLauncherUi : UserControl, ILauncherUi
             var keys = new Dictionary<string, string>();
             foreach (var (_, id) in KeyFields)
                 keys[id] = _keyBoxes.TryGetValue(id, out var b) ? b.BoundKey : "";
-            Emit(new { type = "saveControls", keys, frameRateHotkeys = _frameRateHotkeys?.Checked ?? true });
+            Emit(new
+            {
+                type = "saveControls",
+                keys,
+                frameRateHotkeys = _frameRateHotkeys?.Checked ?? true,
+                saveStates = _saveStates?.Checked ?? true,
+            });
             CloseSheet();
         };
         var back = MakeGhostBtn("Back");
