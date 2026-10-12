@@ -285,10 +285,13 @@ public static partial class FramePacing
     // Skew: how far cell bounds may overlap along U and still count as free
     // (cells whose corners are off the grid overlap their neighbours' bounds);
     // above 2, cell lengths are measured along their edges. A run continues
-    // towards +U only if it reaches MinEnd.
+    // towards +U only if it reaches MinEnd. MinCover: how much of its height
+    // the plane's faces must really cover (the sides of two ledges far apart
+    // share a plane as tall as a wall).
     readonly record struct NativeWideRows(int Normal, int U, bool Low, bool High, float Extend, float MinBlock,
         float MinHeight, float MinLength, float MinRun = float.PositiveInfinity, float MinRowHeight = 0,
-        float MinThickness = 0, bool EdgeColour = false, float Skew = 2, float MinEnd = float.NegativeInfinity);
+        float MinThickness = 0, bool EdgeColour = false, float Skew = 2, float MinEnd = float.NegativeInfinity,
+        float MinCover = 0);
 
     static float NativeWideAxis(NativeWideClipVertex v, int axis) => axis == 0 ? v.X : axis == 1 ? v.Y : v.Z;
 
@@ -381,6 +384,16 @@ public static partial class FramePacing
             {
                 var span = faces[plane];
                 if (span.Max(r => r.V1) - span.Min(r => r.V0) < spec.MinHeight) continue;
+                if (spec.MinCover > 0)
+                {
+                    float covered = 0, reach = float.NegativeInfinity;
+                    foreach (var r in span.OrderBy(r => r.V0))
+                    {
+                        covered += Math.Max(0, r.V1 - Math.Max(r.V0, reach));
+                        reach = Math.Max(reach, r.V1);
+                    }
+                    if (covered < spec.MinCover) continue;
+                }
                 // Whole cells; a half cell left by the cull gets its missing corner.
                 var whole = new List<(float U0, float U1, List<NativeWideRepair> T)>();
                 foreach (var ((lo, hi), tris) in cells)

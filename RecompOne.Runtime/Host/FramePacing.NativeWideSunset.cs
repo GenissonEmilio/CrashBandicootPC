@@ -28,16 +28,54 @@ public static partial class FramePacing
         // ends at absolute X 151200 against the sky: its back wall copies stop there.
         if (x == 158400)
             repairs.RemoveAll(r => Math.Min(r.A.X, Math.Min(r.B.X, r.C.X)) < 151200 - x);
-        // The first two shafts share the temple's outer left wall (absolute X
-        // 111200). Rooms and forest lie beyond it, so its continuation keeps
-        // its true depth and hides them.
-        float outerWall = 111200 - x;
-        bool shaft = x is 110000 or 113200;
-        for (int i = 0; shaft && i < repairs.Count; i++)
+        // The second shaft's ledges and floors (g) end at its right wall
+        // (absolute X 117200); continued through it they stick out of the
+        // wall's continuation. Its back wall (Z 0) goes on behind it.
+        if (x == 113200)
         {
-            var r = repairs[i];
-            if (Math.Abs(r.A.X - outerWall) <= 16 && Math.Abs(r.B.X - outerWall) <= 16 && Math.Abs(r.C.X - outerWall) <= 16)
-                repairs[i] = r with { Boundary = true };
+            float back = -(int)m.ReadU32(world.Header + 8);
+            repairs.RemoveAll(r => Math.Min(r.A.X, Math.Min(r.B.X, r.C.X)) >= 117184 - x
+                && Math.Max(r.A.X, Math.Max(r.B.X, r.C.X)) > 117216 - x
+                && !(r.A.Z == back && r.B.Z == back && r.C.Z == back));
+        }
+        // The walkway outside and the temple's front end at absolute X 100400,
+        // before the pools (the 4:3 view shows nothing beyond): nothing of
+        // them continues west of it.
+        if (x == 110000)
+        {
+            repairs.RemoveAll(r => Math.Max(r.A.X, Math.Max(r.B.X, r.C.X)) <= 100416 - x);
+            NativeWideSunsetCopies(m, world, faces, NativeWideSunsetWalkwayCopies, repairs, snap: false);
+        }
+        // The shafts' outer walls (absolute X): the first two shafts' shared
+        // left wall, the second shaft's right wall and both walls of the third.
+        // Rooms, rooftops and forest lie beyond them, so their continuations
+        // keep their true depth and hide them. A half cell completed over a
+        // skewed neighbour stays behind (in depth it would fight that face).
+        int[] outerWalls = x switch
+        {
+            110000 or 113200 => [111200],
+            81600 => [88800],
+            158400 => [156400, 162800],
+            _ => [],
+        };
+        foreach (int wall in outerWalls)
+        {
+            float outerWall = wall - x;
+            bool OnWall(NativeWideClipVertex v) => Math.Abs(v.X - outerWall) <= 16;
+            var retail = new NativeWideTriangleGrid();
+            foreach (var f in faces)
+                if (f.Valid && f.T.All(OnWall)) retail.Add(f.T);
+            for (int i = 0; i < repairs.Count; i++)
+            {
+                var r = repairs[i];
+                if (!OnWall(r.A) || !OnWall(r.B) || !OnWall(r.C)) continue;
+                var centre = (Position(r.A) + Position(r.B) + Position(r.C)) / 3;
+                NativeWideClipVertex Shrunk(NativeWideClipVertex v) => v with
+                {
+                    Y = centre.Y + (v.Y - centre.Y) * 0.9f, Z = centre.Z + (v.Z - centre.Z) * 0.9f,
+                };
+                if (!retail.Overlaps([Shrunk(r.A), Shrunk(r.B), Shrunk(r.C)])) repairs[i] = r with { Boundary = true };
+            }
         }
         return repairs;
     }
@@ -196,9 +234,28 @@ public static partial class FramePacing
 
     static List<NativeWideRepair> NativeWideSunsetStartRepairs(IMemory m, NativeWideWorld world)
     {
+        var repairs = new List<NativeWideRepair>();
+        NativeWideSunsetCopies(m, world, NativeWideFacesOf(m, world), NativeWideSunsetStartCopies, repairs, snap: true);
+        return repairs;
+    }
+
+    // The temple's first mesh (f) also holds the west end of the walkway
+    // outside (absolute X 100400), whose end face the 4:3 cull removed but
+    // for one triangle. The walkway does not continue west (the pools lie
+    // there); its end face is the next block's west face moved one block.
+    static readonly NativeWideCopy[] NativeWideSunsetWalkwayCopies =
+    [
+        new(new(101184, -83616, 0), new(101216, -83184, 1600), new(-800, 0, 0)),
+    ];
+
+    // Whole polygons in each copy's box, moved (and mirrored), each added
+    // only where neither a face nor a repair is. Snap: for the start's Z-plane
+    // copies (below).
+    static void NativeWideSunsetCopies(IMemory m, NativeWideWorld world, NativeWideFace[] faces,
+        NativeWideCopy[] copies, List<NativeWideRepair> repairs, bool snap)
+    {
         var origin = new Vector3((int)m.ReadU32(world.Header), (int)m.ReadU32(world.Header + 4),
             (int)m.ReadU32(world.Header + 8));
-        var faces = NativeWideFacesOf(m, world);
         // The forest panels are semi-transparent. The walkway's root decals
         // neither block its copies nor are copied (they do not repeat).
         NativeWideTriangleGrid all = new(), opaque = new();
@@ -207,7 +264,11 @@ public static partial class FramePacing
             all.Add(f.T);
             if (!f.SemiTrans) opaque.Add(f.T);
         }
-        var repairs = new List<NativeWideRepair>();
+        foreach (var r in repairs)
+        {
+            all.Add([r.A, r.B, r.C]);
+            opaque.Add([r.A, r.B, r.C]);
+        }
         // Cell corners are off the grid by up to 16, so a copy's corner can miss
         // the corner it meets by as much and open a crack: it takes that
         // corner's position (same plane) instead.
@@ -230,17 +291,17 @@ public static partial class FramePacing
                             if (q != p && Vector3.DistanceSquared(p, q) <= 24 * 24) return v with { X = q.X, Y = q.Y };
             return v;
         }
-        foreach (var copy in NativeWideSunsetStartCopies)
+        foreach (var copy in copies)
             for (int pi = 0; pi < faces.Length; pi++)
             {
                 var t = faces[pi].T;
                 if (!faces[pi].Valid || (copy.Opaque && faces[pi].SemiTrans) || t.Any(v => Position(v) + origin != Vector3.Clamp(Position(v) + origin, copy.Min, copy.Max)))
                     continue;
-                NativeWideClipVertex[] moved = [.. t.Select(v => Snap(v with
+                NativeWideClipVertex[] moved = [.. t.Select(v => v with
                 {
                     X = (float.IsNaN(copy.MirrorX) ? v.X : 2 * (copy.MirrorX - origin.X) - v.X) + copy.Offset.X,
                     Y = v.Y + copy.Offset.Y, Z = v.Z + copy.Offset.Z,
-                }))];
+                }).Select(v => snap ? Snap(v) : v)];
                 // Test a slightly smaller triangle, so neighbours touching by a few
                 // units still fit.
                 var centre = (Position(moved[0]) + Position(moved[1]) + Position(moved[2])) / 3;
@@ -254,7 +315,6 @@ public static partial class FramePacing
                 foreach (var v in moved) AddCorner(Position(v));
                 repairs.Add(new(pi, moved[0], moved[1], moved[2]));
             }
-        return repairs;
     }
 
     // The shafts' side walls (X planes, tall and reaching the shaft front at
@@ -263,11 +323,12 @@ public static partial class FramePacing
     // (Y planes) continue both ways along X, but not the thin platforms
     // (ledges, slabs) on the walls. The shafts' bases (statue fronts and their
     // floors) also stop at the outer walls, and the lowest side wall rows are
-    // only two cells deep.
+    // only two cells deep. The sides of braziers' slabs on one wall share
+    // an X plane as tall as a wall, but cover little of it.
     static readonly NativeWideRows[] NativeWideSunsetRows =
     [
         new(0, 2, Low: false, High: true, Extend: 4800, MinBlock: 1200, MinHeight: 4800, MinLength: 400, MinRun: 400,
-            EdgeColour: true, Skew: 16, MinEnd: 1500),
+            EdgeColour: true, Skew: 16, MinEnd: 1500, MinCover: 2400),
         new(2, 0, Low: true, High: true, Extend: 3200, MinBlock: 800, MinHeight: 800, MinLength: 800,
             MinRowHeight: 300, EdgeColour: true, Skew: 16),
         new(1, 0, Low: true, High: true, Extend: 3200, MinBlock: 800, MinHeight: 400, MinLength: 800,
@@ -278,7 +339,7 @@ public static partial class FramePacing
     static readonly NativeWideRows[] NativeWideSunsetRoofRows =
     [
         new(0, 2, Low: false, High: true, Extend: 4800, MinBlock: 1200, MinHeight: 4800, MinLength: 400, MinRun: 400,
-            EdgeColour: true, Skew: 16, MinEnd: 1500),
+            EdgeColour: true, Skew: 16, MinEnd: 1500, MinCover: 2400),
         new(2, 0, Low: true, High: true, Extend: 3200, MinBlock: 800, MinHeight: 1600, MinLength: 1600,
             MinRowHeight: 300, EdgeColour: true, Skew: 16),
     ];
