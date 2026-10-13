@@ -10,7 +10,7 @@
 // repair (before/after pairs); NOCANOPY=1 drops the jungle canopy backdrop; NOEARLY=1 disables early ruins-object spawns; OBJLOG=<type> logs live objects of a GOOL type; DUMPVRAM=<render,...> dumps VRAM; BLOCK=<hex,...> limits
 // which GOOL events to Crash are dropped while flying (default: all). STATE=<slotN.state> loads
 // a save state at frame STATEAT (default 120): the exact place and camera of a player's screenshot.
-// PACELOG=1 turns on the FramePacing diagnostics log.
+// PACELOG=1 turns on the FramePacing diagnostics log. SNAPFROM=<frame> skips captures before that frame.
 // Uses its own config/save directory under the output folder; GodMode stays off.
 using System.Reflection;
 using System.Runtime.Loader;
@@ -42,6 +42,8 @@ var opt = new Dictionary<string, string>();
 for (int i = 3; i + 1 < args.Length; i += 2) opt[args[i].TrimStart('-')] = args[i + 1];
 string script = opt.GetValueOrDefault("script", "");
 int snapEvery = int.Parse(opt.GetValueOrDefault("snap", "30"));
+// SNAPFROM=<frame>: no captures before that frame (fine snaps of one spot).
+int snapFrom = int.TryParse(Environment.GetEnvironmentVariable("SNAPFROM"), out int sf) ? sf : 0;
 int fps = int.Parse(opt.GetValueOrDefault("fps", "0"));
 var Invariant = System.Globalization.CultureInfo.InvariantCulture;
 float aspect = float.Parse(opt.GetValueOrDefault("aspect", "0"), Invariant);
@@ -265,7 +267,7 @@ using var draw = new Hook(typeof(LibGpu).GetMethod(nameof(LibGpu.DrawOTag))!,
                 if ((zone & 0xFF000000u) == 0x80000000u) m.WriteU32(crash + 0x28, zone);
             }
         }
-        if (renders % snapEvery == 0 && GpuHle.Backend is GlBackend backend)
+        if (renders % snapEvery == 0 && frames >= snapFrom && GpuHle.Backend is GlBackend backend)
         {
             var env = Runtime.Gpu!.CurrentHleDrawEnv;
             backend.PresentDisplay(env.ClipX0, env.ClipY0, env.ClipX1 - env.ClipX0 + 1, env.ClipY1 - env.ClipY0 + 1);

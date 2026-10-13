@@ -1033,7 +1033,12 @@ public sealed class GlBackend : IGpuBackend
                     _gl.BlendEquationSeparate(BlendEquationModeEXT.FuncReverseSubtract, BlendEquationModeEXT.FuncAdd);
                     SetBlend(1f, 1f);
                     _gl.Uniform4(_uBlendOpaque, 0f, 0f, 0f, 1f);
+                    // The native 16:9 world pass writes depth in the first draw:
+                    // the subtractive draw of the same triangles must pass at
+                    // equal depth, or subtractive shadows vanish from the bands.
+                    if (depthTest) _gl.DepthFunc(DepthFunction.Lequal);
                     DrawScissored(bands, bandCount, s, 0, (uint)_count);
+                    if (depthTest) _gl.DepthFunc(DepthFunction.Less);
                 }
                 else
                 {

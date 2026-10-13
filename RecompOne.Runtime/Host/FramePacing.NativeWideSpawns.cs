@@ -22,6 +22,9 @@ public static partial class FramePacing
     /// an early copy moves in step; wiggle platforms wait for Crash; torches
     /// only burn. Crates (stack links depend on spawn order), enemies and
     /// platforms whose phase starts at spawn keep the original timing.
+    /// WalOC spike logs (#122, The Great Gate and Native Fortress) rise on
+    /// time(), the global clock, too; the one beside the top of a climb is
+    /// in the band a zone before the game spawns it.
     /// </summary>
     const uint GoolObjectSpawnAddr = 0x8001BCC8u;
     const uint GoolZoneObjectsTerminateAddr = 0x8001D200u;
@@ -45,17 +48,22 @@ public static partial class FramePacing
     const byte FruiSpawnLife = 5;
     const byte FruiSpawnWumpa = 16;
     /// <summary>
-    /// Early-spawned ruins objects by (GOOL type, spawn): half size in world
+    /// Early-spawned scenery objects by (GOOL type, spawn): half size in world
     /// units for the on-screen test. RWaOC: 0 and 8 wall platform arrays, 4
-    /// pusher, 7 sliding platform, 10 wiggle platform; RuiOC 4 torch.
+    /// pusher, 7 sliding platform, 10 wiggle platform; RuiOC 4 torch; WalOC
+    /// 3 and 4 spike logs (up, down).
     /// </summary>
     static int NativeWideRuinsRadius(byte type, byte spawn) => (type, spawn) switch
     {
         (46, 0 or 8) => 2800,
         (46, 4 or 7 or 10) => 1200,
         (42, 4) => 800,
+        (33, 3 or 4) => 1600,
         _ => 0,
     };
+    /// <summary>The spike log model (SVTX SL1iV).</summary>
+    const uint NativeWideSpikeLogModel = 0x6D782973u;
+    const uint NativeWideSvtxType = 1;
     /// <summary>Same far limit as RGteCalcSpriteRotMatrix.</summary>
     const int NativeWideSpriteMaxDepth = 12000;
     /// <summary>Pool headroom left for the game's own spawns (96 objects).</summary>
@@ -152,8 +160,10 @@ public static partial class FramePacing
                     int pad = radius * proj / sz;
                     if (Math.Abs(sx) > wideMid + pad || Math.Abs(sy) > NativeWideFrustumMidY + pad) continue;
                     // A model is only spawned while one like it is alive: its code,
-                    // model and animations are resident then.
-                    if (radius > 0 && !NativeWideLiveKind(m, type, spawn)) continue;
+                    // model and animations are resident then. A spike log has a
+                    // single model, so its code and model being resident is enough.
+                    if (radius > 0 && !NativeWideLiveKind(m, type, spawn) && !NativeWideSpikeLogResident(m, ldat, type))
+                        continue;
                     if (!CallNativeWideSpawn(c, m, zone, i)) return;
                     _nativeWidePickupZones[zone] = m.ReadU32(zone + 4u);
                     if (--budget == 0) return;
@@ -262,6 +272,11 @@ public static partial class FramePacing
             TerminateNativeWideZone(c, m, zone);
         }
     }
+
+    static bool NativeWideSpikeLogResident(IMemory m, uint ldat, byte type) =>
+        type == GoolTypeWalO
+        && NativeWideResidentEntry(m, m.ReadU32(ldat + LdatExecMapOff + type * 4u), GoolEntryType) != 0
+        && NativeWideResidentEntry(m, NativeWideSpikeLogModel, NativeWideSvtxType) != 0;
 
     static bool NativeWideLiveKind(IMemory m, byte type, byte spawn)
     {

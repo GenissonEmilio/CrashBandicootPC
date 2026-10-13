@@ -523,7 +523,7 @@ public static partial class FramePacing
             12 => NativeWideJungleSkirts, 15 => NativeWideUpstreamSkirts, 19 => NativeWideBoulderDashSkirts,
             33 => NativeWideKoalaSkirts, _ => null
         };
-        if (skirts == null) return repairs;
+        if (skirts == null && level != 18) return repairs;
         var key = new NativeWideSceneryKey(level, m.ReadU32(world.Header), m.ReadU32(world.Header + 4),
             m.ReadU32(world.Header + 8), world.PolyCount, world.VertexCount);
         if (_nativeWideSkirts.TryGetValue(key, out var cached)) return cached;
@@ -536,10 +536,11 @@ public static partial class FramePacing
         if (level == 19 && NativeWideBoulderDashGates.TryGetValue(((int)m.ReadU32(world.Header),
                 (int)m.ReadU32(world.Header + 8)), out var gate))
             NativeWideBoulderDashGateEnds(m, world, gate, all);
-        if (skirts.TryGetValue(((int)m.ReadU32(world.Header), (int)m.ReadU32(world.Header + 8)),
+        if (skirts != null && skirts.TryGetValue(((int)m.ReadU32(world.Header), (int)m.ReadU32(world.Header + 8)),
                 out var skirted))
             NativeWideSkirtRepairs(m, world, [.. skirted], all, river: level == 15, planar: level == 33);
         if (level == 33) NativeWideKoalaWalls(m, world, all);
+        if (level == 18) NativeWideGateRepairs(m, world, all);
         PaceLog($"native-wide level={level} skirt repairs={all.Count - authored}");
         return _nativeWideSkirts[key] = all;
     }
@@ -636,9 +637,12 @@ public static partial class FramePacing
     // planar (Koala Kong): skirts keep the source face's texel scale (see
     // AddNativeWidePlanarStrip); the cave's small rock faces fan their skirts
     // far apart, and the plain strip turned them into streaks.
+    // edgeReach (The Great Gate): single open edges, by polygon * 3 + edge,
+    // each with its own skirt length; when set, only these are continued.
     const float NativeWideSkirtMinExtent = 1500;
     static void NativeWideSkirtRepairs(IMemory m, NativeWideWorld world, HashSet<int>? skirted,
-        List<NativeWideRepair> output, bool river = false, bool planar = false)
+        List<NativeWideRepair> output, bool river = false, bool planar = false,
+        Dictionary<int, float>? edgeReach = null)
     {
         int count = world.PolyCount;
         var triangles = new NativeWideClipVertex[count * 3];
@@ -712,7 +716,8 @@ public static partial class FramePacing
                 out short u0, out short v0, out short u1, out short v1, out short u2, out short v2)
                 || !flags.Textured || flags.SemiTrans) continue;
             outward = Vector3.Normalize(outward);
-            if (skirted?.Contains(owner.Polygon) ?? true) open.Add((owner, [new(u0, v0), new(u1, v1), new(u2, v2)]));
+            if (edgeReach?.ContainsKey(owner.Polygon * 3 + owner.Edge) ?? skirted?.Contains(owner.Polygon) ?? true)
+                open.Add((owner, [new(u0, v0), new(u1, v1), new(u2, v2)]));
             corner[Position(a)] = corner.GetValueOrDefault(Position(a)) + outward;
             corner[Position(b)] = corner.GetValueOrDefault(Position(b)) + outward;
         }
@@ -734,7 +739,7 @@ public static partial class FramePacing
             AddNativeWideSceneryStrip(output, owner.Polygon, a, b, c,
                 uv[owner.Edge], uv[(owner.Edge + 1) % 3], uv[(owner.Edge + 2) % 3],
                 NativeWideSkirtDirection(corner[Position(a)], own), NativeWideSkirtDirection(corner[Position(b)], own),
-                NativeWideSkirtDistance);
+                edgeReach?.GetValueOrDefault(owner.Polygon * 3 + owner.Edge) ?? NativeWideSkirtDistance);
         }
     }
 
