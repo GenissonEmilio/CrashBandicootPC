@@ -5,9 +5,9 @@ namespace RecompOne.Runtime.Host;
 
 public static partial class FramePacing
 {
-    // Jungle Rollers (level 12), Upstream (level 15) and the Koala Kong cave
-    // (level 33) have no sky: every mesh is ground, banks, trunks, plants or
-    // cave rock cut along the 4:3 view (the retail
+    // Jungle Rollers (level 12), Upstream (level 15), Boulder Dash (level 19)
+    // and the Koala Kong cave (level 33) have no sky: every mesh is ground,
+    // banks, trunks, plants or cave rock cut along the 4:3 view (the retail
     // draw lists keep only what the 4:3 camera sees), and the 16:9 view saw
     // black past every cut. Open edges are continued outward in the plane of
     // their own face, with the face's texture, as a skirt. Edges of small
@@ -278,13 +278,250 @@ public static partial class FramePacing
         ],
     };
 
+    // Boulder Dash (level 19) is a canyon of rock walls with temple gates and
+    // the mushroom path: all of it cut along the 4:3 view like Jungle Rollers.
+    // Skirted polygons selected the same way, counting only the side-band
+    // voids beside scenery (a pit seen at the 4:3 edge stays a pit).
+    static readonly Dictionary<(int X, int Z), int[]> NativeWideBoulderDashSkirts = new()
+    {
+        // 0a_jW
+        [(8811, 122898)] =
+        [
+            272, 386, 456, 476, 478, 597, 706, 730, 760, 775, 787, 789, 878, 879, 903, 951, 959, 966, 967, 999,
+            1046, 1052, 1061, 1067, 1111, 1119, 1125, 1139, 1146, 1154, 1164, 1168, 1169, 1170, 1216, 1233,
+            1268, 1275, 1286, 1309, 1394, 1404, 1512, 1514, 1563, 1596
+        ],
+        // 0b_jW
+        [(10653, 114543)] =
+        [
+            2029, 2034, 2037, 2092, 2114, 2118, 2124, 2126, 2128, 2163, 2197, 2260, 2262, 2288, 2423, 2442,
+            2453, 2454, 2523, 2550, 2588, 2642
+        ],
+        // 0c_jW
+        [(11093, 106153)] =
+        [
+            151, 237, 362, 364, 391, 404, 406, 426, 502, 880, 891, 1798, 1822, 1828, 1835, 1865, 1965, 1977,
+            1990, 1992, 2007, 2028, 2033, 2162, 2180, 2183, 2309, 2323, 2342, 2375, 2388, 2397, 2398, 2652,
+            2656, 2661
+        ],
+        // 0d_jW
+        [(9156, 97426)] =
+        [
+            178, 192, 232, 233, 238, 389, 560, 671, 862, 883, 971, 972, 1039, 1100, 1119, 1121, 1125, 1151,
+            1152, 1153, 1324, 1380, 1382, 1396, 1417, 1419, 1423, 1439, 1441, 1449, 1450, 1451, 1456, 1460,
+            1514, 1515, 1660
+        ],
+        // 0e_jW
+        [(10232, 88296)] =
+        [
+            80, 208, 213, 249, 262, 285, 332, 345, 346, 421, 524, 542, 549, 562, 565, 567, 582, 592, 608, 844,
+            872, 879, 881, 1086, 1197, 1210, 1211, 1291, 1295
+        ],
+        // 0f_jW
+        [(9934, 79079)] =
+        [
+            316, 317, 344, 459, 564, 635, 636, 773, 794, 802, 803, 804, 818, 840, 868, 884, 900, 948, 952, 953,
+            961, 1109, 1110, 1184, 1208, 1246, 1302, 1321, 1330, 1357, 1359, 1360, 1364
+        ],
+        // 0g_jW
+        [(10067, 69372)] =
+        [
+            170, 174, 176, 180, 185, 223, 224, 798, 854, 863, 868, 877, 878, 884, 886, 956, 1131, 1166, 1171,
+            1174, 1228, 1248, 1263, 1296, 1300, 1528, 1529, 1544, 1545
+        ],
+        // 0h_jW
+        [(7602, 60174)] =
+        [
+            205, 214, 665, 772, 788, 798, 799, 800, 868, 884, 889, 891, 945
+        ],
+        // 0i_jW
+        [(9119, 51470)] =
+        [
+            224, 280, 284, 300, 302, 350, 351, 352, 403, 417, 421, 471, 579, 600, 601, 697, 759, 795, 833, 849,
+            859, 867, 871, 872, 893, 895, 1153, 1166, 1170
+        ],
+        // 0j_jW
+        [(7564, 42535)] =
+        [
+            55, 99, 191, 193, 197, 199, 203, 205, 207, 209, 211, 231, 267, 321, 602, 682, 684, 902, 963, 965,
+            1013, 1031, 1112
+        ],
+        // 0k_jW
+        [(7814, 33836)] =
+        [
+            240, 245, 248, 667, 722, 724, 934, 964, 965, 1048, 1050, 1051, 1079, 1119, 1183, 1202, 1204, 1225,
+            1232, 1233, 1234, 1249, 1256
+        ],
+        // 0l_jW
+        [(7235, 24831)] =
+        [
+            216, 217, 356, 369, 461, 471, 486, 852, 893, 904, 905, 906, 911, 929, 1008, 1010, 1096, 1116, 1171,
+            1175, 1197, 1199, 1212, 1213, 1420, 1421
+        ],
+        // 0m_jW
+        [(7235, 15638)] =
+        [
+            239, 289, 294, 297, 377, 391, 421, 425, 491, 493, 689, 694, 809, 813, 826, 828, 832, 847, 849, 857,
+            858, 859, 904, 932, 1022, 1038, 1039, 1067
+        ],
+        // 0n_jW
+        [(8095, 6660)] =
+        [
+            50, 53, 61, 278, 292, 296, 346, 474, 475, 566, 608, 622, 658, 692, 895
+        ],
+        // 0o_jW
+        [(8519, -2452)] =
+        [
+            340, 343, 352, 356, 363, 377, 446, 451, 457, 459, 463, 475, 504, 506, 508, 519, 520, 522, 624, 626,
+            643, 646, 655, 659, 679, 681, 803, 804, 999, 1019, 1053, 1054, 1055, 1136, 1137, 1166, 1330, 1363,
+            1364, 1402, 1411
+        ],
+        // 0p_jW
+        [(10050, -11220)] =
+        [
+            504, 684, 721, 726, 729, 783, 803, 859, 863, 884, 886, 899, 900, 930, 1038, 1130, 1193, 1213, 1215,
+            1236, 1244, 1245, 1246, 1342, 1343
+        ],
+        // 0q_jW
+        [(9202, -19839)] =
+        [
+            227, 232, 313, 316, 330, 332, 334, 336, 340, 342, 344, 346, 348, 366, 402, 854, 859, 862, 913, 978,
+            991, 1072, 1077
+        ],
+        // 0r_jW
+        [(7930, -28500)] =
+        [
+            0, 8, 12, 28, 131, 304, 486, 491, 572, 593, 772, 827, 831, 845, 847, 851, 885, 886, 887, 1009,
+            1125, 1156, 1162, 1164, 1198
+        ],
+        // 0s_jW
+        [(8142, -37087)] =
+        [
+            134, 228, 253, 255, 265, 268, 304, 367, 380, 449, 471, 478, 517, 552, 556, 566, 726, 754, 761, 763,
+            954, 1063, 1077, 1078, 1144, 1157, 1161
+        ],
+        // 0t_jW
+        [(8279, -45679)] =
+        [
+            141, 187, 471, 474, 485, 582, 653, 679, 791, 793, 812, 819, 820, 821, 857, 886, 905, 916, 920,
+            1060, 1083, 1089, 1109, 1122, 1131
+        ],
+        // 0u_jW
+        [(8279, -55131)] =
+        [
+            647, 652, 663, 814, 1048, 1053, 1056, 1110, 1132, 1136, 1142, 1144, 1146, 1181, 1215, 1269, 1301,
+            1381, 1434, 1463, 1522, 1565, 1577, 1582
+        ],
+        // 0v_jW
+        [(8279, -65430)] =
+        [
+            300, 341, 352, 353, 392, 399, 482, 485, 495, 499, 505, 509, 513, 515, 517, 535, 1154, 1487
+        ],
+    };
+
+    // Boulder Dash's three temple gates (a boulder waits on each) stand in a
+    // wall across the whole canyon: a 45-degree ramp of three 400 rows, then
+    // two 800 bands of wall, in 800 cells except one 1600 cell at each outer
+    // end. The 4:3 cull removed or halved some of those end cells, mostly on
+    // the right, and the 16:9 view saw black past the wall's corners. A half
+    // end cell is completed; a missing one is the other end's cell mirrored
+    // onto it; where both are missing (the third gate's top band), the next
+    // inner cell is stretched over each half of the end. These cells keep their
+    // true depth: a skirt of some nearer rock would otherwise win the corner.
+    // Absolute wall Z and X of the left end's outer and inner edges and of the
+    // right end's inner and outer edges, by mesh header X and Z.
+    readonly record struct NativeWideGate(float Wall, float OuterLeft, float InnerLeft, float InnerRight,
+        float OuterRight);
+    static readonly Dictionary<(int X, int Z), NativeWideGate> NativeWideBoulderDashGates = new()
+    {
+        [(8279, -65430)] = new(-62806, 3591, 5199, 12399, 13999),  // 0v: the first gate
+        [(9202, -19839)] = new(-19607, 3594, 5194, 12394, 14002),  // 0q: the second gate
+        [(7564, 42535)] = new(43599, 3588, 5196, 12396, 14004),    // 0j: the third gate
+    };
+
+    static void NativeWideBoulderDashGateEnds(IMemory m, NativeWideWorld world, NativeWideGate gate,
+        List<NativeWideRepair> output)
+    {
+        var origin = new Vector3((int)m.ReadU32(world.Header), (int)m.ReadU32(world.Header + 4),
+            (int)m.ReadU32(world.Header + 8));
+        // Cells by side (0 left end, 1 right end, 2 left end's inner neighbour,
+        // 3 right end's inner neighbour) and row (absolute Y range).
+        var cells = new Dictionary<(int Side, float Low, float High), List<NativeWideRepair>>();
+        float[] x0 = [gate.OuterLeft, gate.InnerRight, gate.InnerLeft, gate.InnerRight - 800];
+        float[] x1 = [gate.InnerLeft, gate.OuterRight, gate.InnerLeft + 800, gate.InnerRight];
+        for (int pi = 0; pi < world.PolyCount; pi++)
+        {
+            uint poly = world.Polygons + (uint)pi * 8;
+            NativeWidePolygonVertices(FastU32(m, poly), FastU32(m, poly + 4), out int a, out int b, out int c);
+            if (!TryNativeWideMaterial(m, world, pi, 0, out _, out _,
+                out short u0, out short v0, out short u1, out short v1, out short u2, out short v2)) continue;
+            NativeWideClipVertex[] t = [ReadNativeWideLocal(m, world, a) with { U = u0, V = v0 },
+                ReadNativeWideLocal(m, world, b) with { U = u1, V = v1 },
+                ReadNativeWideLocal(m, world, c) with { U = u2, V = v2 }];
+            float minX = t.Min(v => v.X) + origin.X, maxX = t.Max(v => v.X) + origin.X;
+            float minZ = t.Min(v => v.Z) + origin.Z, maxZ = t.Max(v => v.Z) + origin.Z;
+            if (minZ < gate.Wall - 1 || maxZ > gate.Wall + 1300 || t.Max(v => v.Y) - t.Min(v => v.Y) < 300) continue;
+            for (int side = 0; side < 4; side++)
+            {
+                // Only triangles spanning the whole cell: no trims or details.
+                if (minX < x0[side] - 2 || maxX > x1[side] + 2 || maxX - minX < x1[side] - x0[side] - 16) continue;
+                var key = (side, t.Min(v => v.Y) + origin.Y, t.Max(v => v.Y) + origin.Y);
+                if (!cells.TryGetValue(key, out var cell)) cells[key] = cell = [];
+                cell.Add(new(pi, t[0], t[1], t[2], true));
+            }
+        }
+        // Copies a cell with its X range from0..from1 mapped onto to0..to1.
+        void Map(List<NativeWideRepair> source, float from0, float from1, float to0, float to1)
+        {
+            float scale = (to1 - to0) / (from1 - from0);
+            NativeWideClipVertex Move(NativeWideClipVertex v) =>
+                v with { X = to0 - origin.X + (v.X + origin.X - from0) * scale };
+            foreach (var r in source) output.Add(r with { A = Move(r.A), B = Move(r.B), C = Move(r.C) });
+        }
+        var whole = new Dictionary<(int Side, float Low, float High), List<NativeWideRepair>>();
+        foreach (var (key, cell) in cells)
+        {
+            if (cell.Count == 1 && NativeWideOppositeCorner([cell[0].A, cell[0].B, cell[0].C],
+                    out var p, out var q, out var corner))
+            {
+                cell.Add(new(cell[0].Polygon, p, q, corner, true));
+                if (key.Side < 2) output.Add(cell[^1]);
+            }
+            if (cell.Count == 2) whole[key] = cell;
+        }
+        foreach (var (low, high) in whole.Keys.Select(k => (k.Low, k.High)).Distinct().ToList())
+        {
+            bool left = whole.TryGetValue((0, low, high), out var l);
+            bool right = whole.TryGetValue((1, low, high), out var r);
+            if (left && !right)
+                Map(l!, gate.OuterLeft, gate.InnerLeft, gate.OuterRight, gate.InnerRight);
+            else if (right && !left)
+                Map(r!, gate.InnerRight, gate.OuterRight, gate.InnerLeft, gate.OuterLeft);
+            else if (!left && !right)
+            {
+                float midLeft = (gate.OuterLeft + gate.InnerLeft) / 2, midRight = (gate.InnerRight + gate.OuterRight) / 2;
+                if (whole.TryGetValue((2, low, high), out var nl))
+                {
+                    Map(nl, gate.InnerLeft, gate.InnerLeft + 800, gate.OuterLeft, midLeft);
+                    Map(nl, gate.InnerLeft, gate.InnerLeft + 800, midLeft, gate.InnerLeft);
+                }
+                if (whole.TryGetValue((3, low, high), out var nr))
+                {
+                    Map(nr, gate.InnerRight - 800, gate.InnerRight, gate.InnerRight, midRight);
+                    Map(nr, gate.InnerRight - 800, gate.InnerRight, midRight, gate.OuterRight);
+                }
+            }
+        }
+    }
+
     static IReadOnlyList<NativeWideRepair> NativeWideSceneRepairs(IMemory m, NativeWideWorld world)
     {
         var repairs = NativeWideAssetRepairs(m, world);
         uint level = m.ReadU32(Catalogs.Catalog.LevelIdAddr);
         var skirts = level switch
         {
-            12 => NativeWideJungleSkirts, 15 => NativeWideUpstreamSkirts, 33 => NativeWideKoalaSkirts, _ => null
+            12 => NativeWideJungleSkirts, 15 => NativeWideUpstreamSkirts, 19 => NativeWideBoulderDashSkirts,
+            33 => NativeWideKoalaSkirts, _ => null
         };
         if (skirts == null) return repairs;
         var key = new NativeWideSceneryKey(level, m.ReadU32(world.Header), m.ReadU32(world.Header + 4),
@@ -296,6 +533,9 @@ public static partial class FramePacing
         var all = new List<NativeWideRepair>(repairs.Count);
         foreach (var repair in repairs) all.Add(repair with { Boundary = level == 12 });
         int authored = all.Count;
+        if (level == 19 && NativeWideBoulderDashGates.TryGetValue(((int)m.ReadU32(world.Header),
+                (int)m.ReadU32(world.Header + 8)), out var gate))
+            NativeWideBoulderDashGateEnds(m, world, gate, all);
         if (skirts.TryGetValue(((int)m.ReadU32(world.Header), (int)m.ReadU32(world.Header + 8)),
                 out var skirted))
             NativeWideSkirtRepairs(m, world, [.. skirted], all, river: level == 15, planar: level == 33);
