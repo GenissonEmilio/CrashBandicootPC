@@ -35,6 +35,13 @@ public static partial class FramePacing
         {
             repairs.RemoveAll(r => Math.Max(r.A.X, Math.Max(r.B.X, r.C.X)) <= 100416 - x);
             NativeWideSunsetCopies(m, world, faces, NativeWideSunsetWalkwayCopies, repairs, snap: false);
+            // Above the first shaft's entrance the lintel's upper row (X 110800,
+            // Y -80800..-80400) ends at Z 1200, a cell short of the rows above
+            // and below it: the corridor's back wall showed through the gap.
+            // Its Z 400 cell (the pattern alternates) fills it, at true depth.
+            int lintel = repairs.Count;
+            NativeWideSunsetCopies(m, world, faces, NativeWideSunsetLintelCopies, repairs, snap: false);
+            for (int i = lintel; i < repairs.Count; i++) repairs[i] = repairs[i] with { Boundary = true };
         }
         // At the third shaft's top (n) the right wall steps in from X 162795
         // to 161995 above Y -14801 (a 400 step at X 162395): too low to count
@@ -274,6 +281,11 @@ public static partial class FramePacing
     static readonly NativeWideCopy[] NativeWideSunsetWalkwayCopies =
     [
         new(new(101184, -83616, 0), new(101216, -83184, 1600), new(-800, 0, 0)),
+    ];
+
+    static readonly NativeWideCopy[] NativeWideSunsetLintelCopies =
+    [
+        new(new(110784, -80816, 384), new(110816, -80384, 816), new(0, 0, 800)),
     ];
 
     // Whole polygons in each copy's box, moved (and mirrored), each added

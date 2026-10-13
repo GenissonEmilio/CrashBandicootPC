@@ -8,7 +8,8 @@
 //            or "<from>-<to>:<Button>+<Button>,..." pad ranges in frames
 // Environment: VOID=1 clears the side bands to magenta; NOFIX=1 drops every scene
 // repair (before/after pairs); NOCANOPY=1 drops the jungle canopy backdrop; NOEARLY=1 disables early ruins-object spawns; OBJLOG=<type> logs live objects of a GOOL type; DUMPVRAM=<render,...> dumps VRAM; BLOCK=<hex,...> limits
-// which GOOL events to Crash are dropped while flying (default: all).
+// which GOOL events to Crash are dropped while flying (default: all). STATE=<slotN.state> loads
+// a save state at frame STATEAT (default 120): the exact place and camera of a player's screenshot.
 // Uses its own config/save directory under the output folder; GodMode stays off.
 using System.Reflection;
 using System.Runtime.Loader;
@@ -57,6 +58,14 @@ ConfigManager.View.Fullscreen = false; ConfigManager.View.FrameRate = fps;
 ConfigManager.View.HideTopBar = true;
 CheatConfig.GodMode = false; CheatConfig.Fly = false;
 ConfigManager.SaveGame(); ConfigManager.SaveView([]);
+string? stateFile = Environment.GetEnvironmentVariable("STATE");
+int stateAt = int.TryParse(Environment.GetEnvironmentVariable("STATEAT"), out int sa) ? sa : 120;
+bool stateRequested = false;
+if (stateFile != null)
+{
+    Directory.CreateDirectory(AppPaths.StatesDir);
+    File.Copy(stateFile, Path.Combine(AppPaths.StatesDir, "slot1.state"), true);
+}
 
 var buttonNames = new Dictionary<string, ushort>(StringComparer.OrdinalIgnoreCase)
 {
@@ -222,6 +231,7 @@ using var draw = new Hook(typeof(LibGpu).GetMethod(nameof(LibGpu.DrawOTag))!,
     {
         if (aspect > 0 && GpuHle.WideAspect != aspect) { GpuHle.WideAspect = aspect; GpuHle.RefreshWideFov(); }
         original(c, m); renders++;
+        if (stateFile != null && !stateRequested && frames >= stateAt) { SaveStates.RequestLoad(1); stateRequested = true; }
         if (path != null && frames >= int.Parse(path[1]))
         {
             flying = true;

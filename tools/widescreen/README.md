@@ -63,7 +63,8 @@ Requirements: Python 3 with numpy, scipy, Pillow; .NET 10 SDK for the two C# too
        wide.py pairs artifacts/issue104/runs/base artifacts/issue104/runs/fix pairs.png all
 
    `VOID=1` paints the side bands magenta where nothing is drawn, `NOFIX=1` drops all
-   scene repairs. The probe logs the exact camera of every frame (`log.json`), so
+   scene repairs. `STATE=<slotN.state>` loads a quick-save slot (frame `STATEAT`,
+   default 120; use ~300 so the level is running): the player's exact spot and camera. The probe logs the exact camera of every frame (`log.json`), so
    `view log:<run>:<render>` reproduces any frame offline. Crash/camera offsets differ
    per level: read them from a short run's `log.json` (`crash` vs `cam`).
 
