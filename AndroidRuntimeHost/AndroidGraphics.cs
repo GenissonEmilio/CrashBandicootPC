@@ -87,7 +87,7 @@ static class AndroidGraphics
         if (Math.Abs(FrameClock.TargetHz - hz) > 0.5)
             FrameClock.TargetHz = hz;
         if (reset)
-            FramePacing.Reset();
+            FramePacing.OnFrameRateChanged();
         AndroidEglContext.Current?.SetPresentHz(hz);
         PresentHzChanged?.Invoke(hz);
         Android.Util.Log.Info("CrashGPU",

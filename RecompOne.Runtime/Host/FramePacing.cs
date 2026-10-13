@@ -150,7 +150,7 @@ namespace RecompOne.Runtime.Host;
 /// Congrats spawn, Warp_Out playnull) and the crate-tally complete lid
 /// stay on the original 30 Hz pad — playnull is per interpret, and BonoC
 /// spawn() is not Crash so the 30 Hz burst cap would eat CardC. Sticky
-/// until NSInit so TryArmUnlock cannot re-arm 30 presents later.
+/// until NSInit so TryArmUnlock cannot re-arm a few presents later.
 /// Crash on the warthog (Hog Wild / Whole Hog) writes pathprog with
 /// spd() then calcpath into x/z. Grounded 34+scale keeps StopAtWalls
 /// but leaves pathprog at the full 30 Hz step, so the hog runs at
@@ -629,10 +629,17 @@ public static partial class FramePacing
     static bool _levelReady;
     /// <summary>CardC / Warp_Out / Tawna Congrats — stay on the 30 Hz pad until NSInit.</summary>
     static bool _saveUiPad;
-    /// <summary>GpuUpdates to keep at 30 FPS after the first real DrawOTag.</summary>
+    /// <summary>GpuUpdates left at 30 FPS after the first real DrawOTag.</summary>
     static int _holdLocked;
-    /// <summary>Extra 30 Hz presents while Crash is still in Warp_In after the 30-frame hold.</summary>
-    static int _warpHold;
+    /// <summary>
+    /// Native GpuUpdates before the unlock arms (~0.1 s). The first gameplay
+    /// frames (camera snap, first-frame object code) run the original step.
+    /// It was 30 plus the whole Warp_In: a visible second at 30 FPS on every
+    /// level entry and FPS switch (#148).
+    /// </summary>
+    const int ArmSettlePresents = 3;
+    /// <summary>WantsUnlock at the last Reset. Null until the first one.</summary>
+    static bool? _resetUnlocked;
     /// <summary>Last PsyQ VSync HLE timestamp. Gap &gt; 0.5 ms starts a new GpuUpdate burst.</summary>
     static long _lastVsyncHleTs;
     static bool _armedThisGpu;

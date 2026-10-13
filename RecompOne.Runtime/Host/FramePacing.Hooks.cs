@@ -403,7 +403,6 @@ public static partial class FramePacing
         _levelReady = false;
         _saveUiPad = false;
         _holdLocked = 0;
-        _warpHold = 0;
         _loggedUnlockGpu = false;
         ResetWaterClock();
         _fadeAcc = 0;
@@ -462,7 +461,6 @@ public static partial class FramePacing
             if (!Catalog.Levels.AllowsUnlockedFps(id) || _saveUiPad || IsDemoPlayback(m))
             {
                 _holdLocked = 0;
-                _warpHold = 0;
                 return;
             }
 
@@ -477,26 +475,18 @@ public static partial class FramePacing
             _armedThisGpu = true;
             if (_holdLocked == 0)
             {
-                _holdLocked = 30;
-                PaceLog($"first draw lid={id} crash=0x{crash:X8} — 30 FPS × 30");
+                _holdLocked = ArmSettlePresents;
+                PaceLog($"first draw lid={id} crash=0x{crash:X8} — 30 FPS × {ArmSettlePresents}");
             }
 
             _holdLocked--;
             PaceLog($"hold {_holdLocked}");
             if (_holdLocked > 0) return;
 
-            // Warp_In is longer than 30 presents when NS is still paging the
-            // warp anim. Unlock mid-cine land-locks it; wait=1 then never
-            // finishes and Crash stays a spawn streak. Stay at 30 Hz until
-            // Warp_In ends, or 3 more seconds.
-            uint st = m.ReadU32(crash + ObjStateOff);
-            if (IsWarpInState(st) && _warpHold < 90)
-            {
-                _warpHold++;
-                PaceLog($"warp hold {_warpHold} st={st}");
-                return;
-            }
-
+            // Warp_In does not wait: unlocked, it is land-locked like a death
+            // respawn (one original step per 34 wall ticks, CrashLandShouldUpdate).
+            // The old Warp_In hold also restarted the 30-present count, so
+            // level entry stayed at 30 FPS for up to ~2 s.
             _levelReady = true;
             _clockArmed = false;
             _frameTimeReady = false;

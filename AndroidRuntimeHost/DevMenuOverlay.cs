@@ -332,7 +332,7 @@ sealed partial class DevMenuOverlay : FrameLayout
             {
                 view.FrameRate = ViewConfig.FrameRateOptionValues[index];
                 AndroidGraphics.ApplyLive();
-                FramePacing.Reset();
+                FramePacing.OnFrameRateChanged();
                 ShowSection("display");
             });
         Hint("Gameplay and bonus. Refresh cap — 60 and 120 play at the same speed. Menus, crate tally, and bonus save stay 30.");
@@ -417,7 +417,7 @@ sealed partial class DevMenuOverlay : FrameLayout
             {
                 view.FrameRate = ViewConfig.FrameRateOptionValues[index];
                 AndroidGraphics.ApplyLive();
-                FramePacing.Reset();
+                FramePacing.OnFrameRateChanged();
                 ShowSection("rendering");
             });
         Hint("Gameplay and bonus. Refresh cap — delta time keeps 60 and 120 at the same play speed. Menus, crate tally, and bonus save stay 30.");

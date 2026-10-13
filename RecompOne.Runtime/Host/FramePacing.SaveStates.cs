@@ -4,8 +4,8 @@ public static partial class FramePacing
 {
     /// <summary>
     /// A save state replaced guest RAM mid-level. Drop every per-object and
-    /// per-level cache the way NSInit does, then the same Reset + 30 FPS hold
-    /// as an FPS switch or pause resume; the clock re-reads ticks_elapsed.
+    /// per-level cache the way NSInit does, then the same Reset + short 30 FPS
+    /// settle as a pause resume; the clock re-reads ticks_elapsed.
     /// </summary>
     internal static void OnStateLoaded()
     {

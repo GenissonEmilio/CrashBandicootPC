@@ -44,7 +44,7 @@ public static partial class FramePacing
 
     /// <summary>
     /// Warp_Out, Tawna/Brio/Cortex end, or a live CardC object. Sticky so
-    /// TryArmUnlock cannot re-arm after 30 presents (0.1 s at uncapped).
+    /// TryArmUnlock cannot re-arm a few presents later.
     /// </summary>
     static void ArmSaveUiPad()
     {
@@ -160,8 +160,25 @@ public static partial class FramePacing
         PaceLog($"original pad lid={id}");
     }
 
+    /// <summary>
+    /// FrameRate combo / hotkey, VSync, graphics preset. Sim dt is wall time,
+    /// so a new refresh cap between unlocked rates keeps the armed clock and
+    /// all per-object pacing: no 30 FPS dip, no re-rolled gate phase, no
+    /// stashed ride carry. Only original ↔ unlocked needs <see cref="Reset"/>.
+    /// </summary>
+    public static void OnFrameRateChanged()
+    {
+        if (_resetUnlocked == WantsUnlock)
+        {
+            PaceLog($"refresh cap change, clock kept (unlock={WantsUnlock})");
+            return;
+        }
+        Reset();
+    }
+
     public static void Reset()
     {
+        _resetUnlocked = WantsUnlock;
         StashRideForReset();
         _guestTicks = 0;
         _frameTicks = 34;
@@ -211,7 +228,6 @@ public static partial class FramePacing
         _levelReady = false;
         _saveUiPad = false;
         _holdLocked = 0;
-        _warpHold = 0;
         _lastVsyncHleTs = 0;
         _armedThisGpu = false;
         _gpuFinished = false;
@@ -305,7 +321,7 @@ public static partial class FramePacing
     }
 
     /// <summary>
-    /// Called from every host present. Arms delta-time after the 30-frame hold
+    /// Called from every host present. Arms delta-time after the settle hold
     /// even when GpuUpdate was a direct jal (no MonoMod, no Dispatcher.Call).
     /// </summary>
     public static void OnHostPresent(IMemory? m)
@@ -806,10 +822,6 @@ public static partial class FramePacing
             // object freed
         }
     }
-
-    /// <summary>NTSC-U Warp_In is 40 (gooc dump lists it at 41).</summary>
-    static bool IsWarpInState(uint state) =>
-        state == StateDeathWarthog || state == StateWarpIn;
 
     /// <summary>
     /// playframe waits on a stack tag, not GOOL_FLAG_STALL, so ChangeState

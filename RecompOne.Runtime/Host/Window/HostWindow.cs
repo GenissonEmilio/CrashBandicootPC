@@ -495,7 +495,7 @@ internal static class HostWindow
             240 => 240,
             _ => 60,
         };
-        FramePacing.Reset();
+        FramePacing.OnFrameRateChanged();
         if (_window == null) return;
         try { _window.VSync = view.VSync; }
         catch { /* some backends reject runtime changes */ }

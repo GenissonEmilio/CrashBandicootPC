@@ -10,6 +10,7 @@
 // repair (before/after pairs); NOCANOPY=1 drops the jungle canopy backdrop; NOEARLY=1 disables early ruins-object spawns; OBJLOG=<type> logs live objects of a GOOL type; DUMPVRAM=<render,...> dumps VRAM; BLOCK=<hex,...> limits
 // which GOOL events to Crash are dropped while flying (default: all). STATE=<slotN.state> loads
 // a save state at frame STATEAT (default 120): the exact place and camera of a player's screenshot.
+// PACELOG=1 turns on the FramePacing diagnostics log.
 // Uses its own config/save directory under the output folder; GodMode stays off.
 using System.Reflection;
 using System.Runtime.Loader;
@@ -57,6 +58,8 @@ ConfigManager.View.Widescreen = true; ConfigManager.View.InternalResolution = 2;
 ConfigManager.View.Fullscreen = false; ConfigManager.View.FrameRate = fps;
 ConfigManager.View.HideTopBar = true;
 CheatConfig.GodMode = false; CheatConfig.Fly = false;
+// PACELOG=1 writes state/logs/pacing.txt (unlock arm, land-lock gates).
+if (Environment.GetEnvironmentVariable("PACELOG") == "1") ConfigManager.View.SetBool("Diagnostics.FramePacing", true);
 ConfigManager.SaveGame(); ConfigManager.SaveView([]);
 string? stateFile = Environment.GetEnvironmentVariable("STATE");
 int stateAt = int.TryParse(Environment.GetEnvironmentVariable("STATEAT"), out int sa) ? sa : 120;
