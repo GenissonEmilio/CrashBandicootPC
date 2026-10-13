@@ -623,7 +623,7 @@ internal static class HostWindow
         ApplyWidescreen(ConfigManager.View.Widescreen);
         ApplyVSync(ConfigManager.View.VSync);
 
-        _imgui = new ImGuiController(_gl, _window, _input, null, ConfigureImGui);
+        _imgui = new ImGuiController(_gl, _window, new ImGuiInputContext(_input), null, ConfigureImGui);
 
         PanelManager.Register(new OutputPanel());
         PanelManager.Register(new VramViewerPanel());
