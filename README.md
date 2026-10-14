@@ -20,14 +20,19 @@ This isn't an emulator. The original PS1 code is **statically recompiled** into 
 
 - **Native widescreen (16:9).** Nothing is stretched: the game draws more of the world on both sides of the screen, with the same camera. The HUD moves out to the new screen edges.
 - **High frame rate.** 60, 120, 240 FPS or uncapped. Each object keeps its original speed, so the game plays as it did on a PS1, only smoother. You can switch frame rate in game with hotkeys.
-- **High resolution.** Internal resolution from native up to **8x (4K)**.
-- **Image options.** Bilinear, sharp bilinear and soft smooth texture filters, plus **dedither** and **dejitter** to remove the PS1 dithering and wobbly polygons, and an optional **CRT filter** (MattiasCRT) for the old TV look.
-- **Cheats.** Infinite lives, level select, god mode and **fly mode**.
-- **Mods.** Drop C# mods, texture packs and asset overlays into `mods/` and switch them on or off from the launcher. See the [modding guide](docs/MODDING.md).
-- **Controllers and keyboard.** Gamepad support, rebindable keys and optional **analog movement**: the left stick steers Crash in any direction, not only the 8 of the D-pad.
+- **High resolution.** Internal resolution from native up to **8x (4K)**, with integer scaling if you want perfectly sharp pixels.
+- **Image options.** Bilinear, sharp bilinear and soft smooth texture filters, plus **dedither** and **dejitter** to remove the PS1 dithering and wobbly polygons. If you keep the dithering, it stays aligned to the PS1 pixels at any resolution. There's also an optional **CRT filter** (MattiasCRT) for the old TV look.
+- **Quick save and quick load.** Save anywhere and load it back in a second: `F5` saves, `F8` loads, `F6`/`F7` switch slot. The same actions are in the pause menu.
+- **Keep your lives.** Optional: the lives count is stored in your memory card save and comes back when you load it, as in Crash 2 and 3.
 - **Box counter.** Optional on-screen count of the boxes you broke and the boxes the level's gem needs. It turns gray when a death loses the gem.
-- **Windows, Linux and Android.**
+- **Level warp.** Jump to any level or bonus round from the Dev Menu, including **Stormy Ascent**, the level cut from the original game.
+- **Cheats.** Infinite lives, level select (secret levels too), god mode, **fly mode** and all 26 gems on or off.
+- **Mods.** Drop C# mods, texture packs and asset overlays into `mods/` and switch them on or off from the launcher or the in-game Dev Menu. See the [modding guide](docs/MODDING.md).
+- **Controllers and keyboard.** Gamepad support (PlayStation Classic pad included), rebindable keys and optional **analog movement**: the left stick steers Crash in any direction, not only the 8 of the D-pad.
+- **A launcher on every platform.** The same Crash-themed launcher on Windows, Linux and Android, usable with mouse, keyboard, touch or gamepad. In game, the pause menu, Dev Menu and Settings can match its style (or keep the classic gray look).
 - **Plays from a `.chd` or `.cue` + `.bin` dump.** No extraction or converter needed.
+
+Every extra is optional: each one has its own switch in Settings, so you can play it exactly like the original.
 
 > It's still a work in progress. Widescreen is a big job: some levels still show the edges of the original scenery. Bugs exist, and we'd love to hear about them (see [Found a bug?](#found-a-bug)).
 
@@ -51,18 +56,17 @@ Install the `.apk` from [Releases](https://github.com/Matteo842/CrashBandicoot-L
 
 ### Linux
 
-1. Download `CrashBandicoot-Linux` from [**Releases**](https://github.com/Matteo842/CrashBandicoot-Launcher/releases/latest) and make it executable (browsers drop that permission):
+1. Download `CrashBandicoot-Linux` from [**Releases**](https://github.com/Matteo842/CrashBandicoot-Launcher/releases/latest).
+2. Mark it as executable once, because browsers drop that permission: right-click it, **Properties → Permissions → Allow executing file as program** (or `chmod +x CrashBandicoot-Linux`).
+3. Double-click it. The launcher opens.
+4. Click **Select disc** to choose your `.chd` or `.cue`, then click **START GAME**. A disc in the same folder as the program is picked up on its own.
 
-   ```bash
-   chmod +x CrashBandicoot-Linux
-   ```
+It's the same launcher as on Windows, with Settings, Controls, Mods and Cheats, usable with mouse, keyboard or gamepad. The first launch builds the game from your disc, which takes a minute or two. While you play, the launcher steps aside, and it comes back when you close the game. In **About** (the **i** button) you can add it to your applications menu, which also makes it show up in Steam's *Add a Non-Steam Game* list.
 
-2. Double-click `CrashBandicoot-Linux` (or run `./CrashBandicoot-Linux` from a terminal). The launcher opens.
-3. Click **Select disc** to choose your `.chd` or `.cue`, then **START GAME**. A disc in the same folder as the program is picked up on its own.
+You need a GPU with **OpenGL 4.3+** (Mesa, NVIDIA or AMD). Audio (OpenAL Soft) is bundled, so there's nothing else to install. The launcher window uses X11, which Wayland desktops provide through XWayland. If it doesn't start, attach `logs/last-run.txt` (next to the program) to your [bug report](https://github.com/Matteo842/CrashBandicoot-Launcher/issues).
 
-It's the same launcher as on Windows: Settings, Controls, Mods and Cheat, with mouse, keyboard or gamepad. The first start builds the game from your disc, which takes a minute or two. While you play the launcher steps aside, and it comes back when you close the game. In **About** (the **i** button) you can add it to your applications menu, which also makes it show up in Steam's *Add a Non-Steam Game* list.
-
-To skip the launcher (for example in a Steam shortcut), start the game directly:
+<details>
+<summary><b>Linux: start the game without the launcher (Steam shortcuts, scripts)</b></summary>
 
 ```bash
 ./CrashBandicoot-Linux --run /path/to/your/game.chd
@@ -70,7 +74,7 @@ To skip the launcher (for example in a Steam shortcut), start the game directly:
 
 Without the path, `--run` uses the last disc you played.
 
-You need a GPU with **OpenGL 4.3+** (Mesa, NVIDIA or AMD). Audio (OpenAL Soft) is bundled, so there's nothing else to install. The launcher window uses X11, which Wayland desktops provide through XWayland. If it doesn't start, attach `logs/last-run.txt` (next to the program) to your [bug report](https://github.com/Matteo842/CrashBandicoot-Launcher/issues).
+</details>
 
 <details>
 <summary><b>Linux troubleshooting: instant <code>Segmentation fault</code> in a VM</b></summary>
