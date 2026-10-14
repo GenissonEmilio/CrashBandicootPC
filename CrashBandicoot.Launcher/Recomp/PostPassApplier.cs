@@ -25,10 +25,10 @@ public static class PostPassApplier
     }
 
     /// <summary>
-    /// SCUS-94900 world/model geom: recompiler emits <c>return</c> instead of
-    /// <c>jr</c> into a clip flag jump-table after clobbering GP/SP as temps,
-    /// and splits 80036BF4/80036D9C so the triangle loop's continue at 80036CAC
-    /// becomes an unmapped <c>Dispatcher.Call</c>.
+    /// SCUS-94900 lightning / dark world geom (80036340, 80036BF4): recompiler
+    /// emits <c>return</c> instead of <c>jr</c> into an fx-bit jump-table after
+    /// clobbering GP/SP as temps, and splits 80036BF4/80036D9C so the triangle
+    /// loop's continue at 80036CAC becomes an unmapped <c>Dispatcher.Call</c>.
     /// </summary>
     static string FixGeomJumpTableReturns(string src)
     {
@@ -36,7 +36,7 @@ public static class PostPassApplier
             src.Contains("L80036CAC:", StringComparison.Ordinal))
             return src; // already merged
 
-        // 80036340: fall through into inlined table body (restores SP/GP at epilogue).
+        // 80036340: jr into the inlined table body (restores SP/GP at epilogue).
         src = ReplaceOnce(src,
             """
                     c.RA = 0x80030000u;
@@ -53,9 +53,17 @@ public static class PostPassApplier
                     c.SP = c.At << 7;
                     c.RA = c.RA + c.SP;
                     c.FP = ~(c.GP | 0u);
-                    // jr→return footgun: fall through into inlined clip jump-table.
+                    L800364D4: ;
                     RecompOne.Runtime.Gte.Write(6, c.S3);
             """);
+        src = RouteFxJumpTable(src,
+            """
+                    c.RA = c.RA + 0x64D4u;
+                    c.SP = c.At << 7;
+                    c.RA = c.RA + c.SP;
+                    c.FP = ~(c.GP | 0u);
+
+            """, 0x800364D4u, "L800368C8");
 
         // Merge 80036BF4 + 80036D9C (loop continue at 80036CAC must be a goto).
         src = ReplaceOnce(src,
@@ -118,10 +126,17 @@ public static class PostPassApplier
                     c.SP = c.SP << 7;
                     c.RA = c.RA + c.SP;
                     c.FP = ~(c.GP | 0u);
-                    goto L80036D9C;
                     L80036D9C: ;
                     RecompOne.Runtime.Gte.Write(6, c.S3);
             """);
+        src = RouteFxJumpTable(src,
+            """
+                    c.RA = c.RA + 0x6D9Cu;
+                    c.SP = c.SP << 7;
+                    c.RA = c.RA + c.SP;
+                    c.FP = ~(c.GP | 0u);
+
+            """, 0x80036D9Cu, "L80037190");
 
         src = ReplaceOnce(src,
             """
@@ -138,6 +153,48 @@ public static class PostPassApplier
                     }
             """);
 
+        return src;
+    }
+
+    /// <summary>
+    /// The <c>jr ra</c> after <paramref name="jump"/> enters an 8-entry table of
+    /// 0x80-byte blocks at <paramref name="tableBase"/>, indexed by the fx bits
+    /// of the polygon's three vertices (SP = bits &lt;&lt; 7). fx vertices take the
+    /// second far colour / IR0 bank: the lightning flash. Entries 0-6 end in
+    /// <c>b tail</c>, entry 7 falls into the tail.
+    /// </summary>
+    static string RouteFxJumpTable(string src, string jump, uint tableBase, string tail)
+    {
+        jump = NormalizeLf(jump);
+        int at = src.IndexOf(jump, StringComparison.Ordinal);
+        if (at < 0)
+            throw new InvalidDataException(
+                $"Fx jump-table pattern for {tableBase:X8} not found. Recompiler output may have changed.");
+        at += jump.Length;
+
+        var sw = new StringBuilder("        switch ((c.SP >> 7) & 7u)\n        {\n");
+        for (uint k = 1; k < 8; k++)
+            sw.Append($"            case {k}u: goto L{tableBase + k * 0x80u:X8};\n");
+        sw.Append("        }\n");
+        src = src.Insert(at, sw.ToString());
+        at += sw.Length;
+
+        var entryEnd = new Regex(
+            @"if \(\(int\)0u >= 0\) \{\n[^\n]*\n[ \t]*goto " + tail + @";\n[ \t]*\}\n[^\n]*\n");
+        for (uint k = 1; k < 8; k++)
+        {
+            var end = entryEnd.Match(src, at);
+            if (!end.Success)
+                throw new InvalidDataException($"Fx jump-table entry {k} of {tableBase:X8} not found.");
+            var label = $"        L{tableBase + k * 0x80u:X8}: ;\n";
+            src = src.Insert(end.Index + end.Length, label);
+            at = end.Index + end.Length + label.Length;
+        }
+
+        int tailAt = src.IndexOf(tail + ": ;", at, StringComparison.Ordinal);
+        var extra = entryEnd.Match(src, at);
+        if (tailAt < 0 || (extra.Success && extra.Index < tailAt))
+            throw new InvalidDataException($"Fx jump-table {tableBase:X8} layout changed.");
         return src;
     }
 

@@ -1057,7 +1057,7 @@ public static partial class FramePacing
         int r = (int)(v.R + 0.5f), g = (int)(v.G + 0.5f), b = (int)(v.B + 0.5f);
         int lx = 0, ly = 0, lz = 0;
         bool lightBank = false;
-        if (_nativeWideShader == NativeWideShader.Lamp)
+        if (_nativeWideShader is NativeWideShader.Lamp or NativeWideShader.Tint or NativeWideShader.FogTint)
         {
             uint vertex = world.Vertices + (uint)vertexIndex * 8u;
             uint v0 = FastU32(m, vertex);
@@ -1080,12 +1080,13 @@ public static partial class FramePacing
         int sz = Math.Clamp((int)rz, 0, 0xFFFF);
         if (_nativeWideShader is NativeWideShader.Tint or NativeWideShader.FogTint)
         {
-            // Match the tint pass emitted by the current recompiler, which uses
-            // the first lighting bank for all three vertices of each polygon.
-            int amount = (short)_nativeWideLighting[3];
-            r = NativeWideDepthCue(r, _nativeWideLighting[0], amount);
-            g = NativeWideDepthCue(g, _nativeWideLighting[1], amount);
-            b = NativeWideDepthCue(b, _nativeWideLighting[2], amount);
+            // Lightning banks: fx vertices take far colour 2 / IR0 2 (the
+            // flash), the rest far colour 1 / IR0 1 (#123).
+            int bank = lightBank ? 4 : 0;
+            int amount = (short)_nativeWideLighting[bank + 3];
+            r = NativeWideDepthCue(r, _nativeWideLighting[bank], amount);
+            g = NativeWideDepthCue(g, _nativeWideLighting[bank + 1], amount);
+            b = NativeWideDepthCue(b, _nativeWideLighting[bank + 2], amount);
         }
         if (_nativeWideShader == NativeWideShader.Lamp)
         {
