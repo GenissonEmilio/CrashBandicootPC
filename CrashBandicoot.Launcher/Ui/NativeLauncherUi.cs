@@ -100,6 +100,7 @@ public sealed class NativeLauncherUi : UserControl, ILauncherUi
     ThemeCheck? _crtFilter;
     ThemeCheck? _saveLives;
     ThemeCheck? _analogMovement;
+    ThemeCheck? _boxCounter;
     ThemeCheck? _cheatLives;
     ThemeCheck? _cheatLevel;
     ThemeCheck? _cheatGod;
@@ -298,6 +299,7 @@ public sealed class NativeLauncherUi : UserControl, ILauncherUi
         SetCheck(_crtFilter, state, "crtFilter");
         SetCheck(_saveLives, state, "saveLives");
         SetCheck(_analogMovement, state, "analogMovement");
+        SetCheck(_boxCounter, state, "boxCounter");
         SetCheck(_cheatLives, state, "infiniteLives");
         SetCheck(_cheatLevel, state, "levelSelect");
         SetCheck(_cheatGod, state, "godMode");
@@ -1517,6 +1519,12 @@ public sealed class NativeLauncherUi : UserControl, ILauncherUi
         y += 52;
         AddHint("The gamepad left stick steers Crash in any direction, not only the 8 of the D-pad. D-pad and keyboard are unchanged.");
 
+        _boxCounter = MakeCheck("Box counter");
+        _boxCounter.Location = new Point(12, y);
+        list.Controls.Add(_boxCounter);
+        y += 52;
+        AddHint("Shows boxes broken / boxes needed for the gem in the corner during levels. Turns gray when a death loses the gem: Crash 1 forgets the boxes broken before the last checkpoint.");
+
         list.AutoScrollMinSize = new Size(0, y + 18);
 
         var save = MakePrimaryBtn("Save");
@@ -1539,6 +1547,7 @@ public sealed class NativeLauncherUi : UserControl, ILauncherUi
                 crtFilter = _crtFilter?.Checked ?? false,
                 saveLives = _saveLives?.Checked ?? true,
                 analogMovement = _analogMovement?.Checked ?? false,
+                boxCounter = _boxCounter?.Checked ?? false,
             });
             CloseSheet();
         };

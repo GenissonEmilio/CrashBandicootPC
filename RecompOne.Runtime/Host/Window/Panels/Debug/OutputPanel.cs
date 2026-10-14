@@ -13,6 +13,12 @@ internal sealed class OutputPanel : IPanel
     static int _texW, _texH, _nativeH;
     static float _aspect = 4f / 3f;
 
+    /// <summary>Screen rect of the game image, for overlays drawn on it (box counter).</summary>
+    public static Vector2 ImageMin { get; private set; }
+    public static Vector2 ImageMax { get; private set; }
+    /// <summary>ImGui frame the rect was taken; older = no image this frame.</summary>
+    public static int ImageFrame { get; private set; } = -1;
+
     public static void SetTexture(uint id, int w, int h, float aspect = 0f, int nativeHeight = 0)
         => (_texId, _texW, _texH, _nativeH, _aspect) =
             (id, w, h, nativeHeight > 0 ? nativeHeight : h, aspect > 0f ? aspect : 4f / 3f);
@@ -85,6 +91,9 @@ internal sealed class OutputPanel : IPanel
         if (Hle.GpuHle.CrtFilter && Hle.GpuHle.Backend is Hle.GlBackend gl && _texId == gl.PresentTexture)
             tex = CrtTexture(gl, ref imageSize);
         ImGui.Image((nint)tex, imageSize);
+        ImageMin = ImGui.GetItemRectMin();
+        ImageMax = ImGui.GetItemRectMax();
+        ImageFrame = ImGui.GetFrameCount();
     }
 
     static uint CrtTexture(Hle.GlBackend gl, ref Vector2 imageSize)

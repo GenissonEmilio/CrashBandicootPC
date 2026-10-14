@@ -25,6 +25,7 @@ This isn't an emulator. The original PS1 code is **statically recompiled** into 
 - **Cheats.** Infinite lives, level select, god mode and **fly mode**.
 - **Mods.** Drop C# mods, texture packs and asset overlays into `mods/` and switch them on or off from the launcher. See the [modding guide](docs/MODDING.md).
 - **Controllers and keyboard.** Gamepad support, rebindable keys and optional **analog movement**: the left stick steers Crash in any direction, not only the 8 of the D-pad.
+- **Box counter.** Optional on-screen count of the boxes you broke and the boxes the level's gem needs. It turns gray when a death loses the gem.
 - **Windows, Linux and Android.**
 - **Plays from a `.chd` or `.cue` + `.bin` dump.** No extraction or converter needed.
 

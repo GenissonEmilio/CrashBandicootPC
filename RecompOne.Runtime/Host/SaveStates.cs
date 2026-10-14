@@ -217,6 +217,7 @@ public static class SaveStates
         try
         {
             Restore(raw, c, psm);
+            BoxCounter.Reset();
             SessionLog.Info($"save state slot {slot} loaded (level {psm.ReadU32(Catalog.LevelIdAddr)})");
             DevHudOverlay.Flash($"State loaded · slot {slot}");
         }

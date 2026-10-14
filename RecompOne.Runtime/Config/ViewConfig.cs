@@ -358,4 +358,14 @@ public class ViewConfig
         get => GetBool("AnalogMovement");
         set => SetBool("AnalogMovement", value);
     }
+
+    /// <summary>
+    /// Box counter on screen during levels (#131): boxes broken / boxes needed for
+    /// the level's gem. Off by default.
+    /// </summary>
+    public bool BoxCounter
+    {
+        get => GetBool("BoxCounter");
+        set => SetBool("BoxCounter", value);
+    }
 }

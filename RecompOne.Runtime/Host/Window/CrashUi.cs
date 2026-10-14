@@ -450,6 +450,10 @@ internal static class CrashUi
 
     /// <summary>Launcher logo treatment: crate-brown outline, drop shadow, yellow-to-orange fill.</summary>
     static void OutlinedTitle(ImDrawListPtr dl, ImFontPtr font, float size, Vector2 pos, string text, float ui)
+        => OutlinedTitle(dl, font, size, pos, text, ui, Rgb(255, 196, 48), Wumpa);
+
+    static void OutlinedTitle(ImDrawListPtr dl, ImFontPtr font, float size, Vector2 pos, string text, float ui,
+        Vector4 top, Vector4 bottom)
     {
         float o = Math.Max(1.5f, 2f * ui);
         dl.AddText(font, size, pos + new Vector2(0f, o + 3f * ui), U32(Vector4.Zero with { W = 0.55f }), text);
@@ -467,14 +471,52 @@ internal static class CrashUi
             dl.AddText(font, size, pos, 0xFFFFFFFFu, text);
             var verts = (ImDrawVert*)dl.NativePtr->VtxBuffer.Data;
             int end = dl.NativePtr->VtxBuffer.Size;
-            var top = Rgb(255, 196, 48);
             float y0 = pos.Y + size * 0.2f, span = size * 0.6f;
             for (int i = first; i < end; i++)
             {
                 float t = Math.Clamp((verts[i].pos.Y - y0) / span, 0f, 1f);
-                verts[i].col = U32(Vector4.Lerp(top, Wumpa, t));
+                verts[i].col = U32(Vector4.Lerp(top, bottom, t));
             }
         }
+    }
+
+    /// <summary>Fill colors of <see cref="HudText"/>.</summary>
+    public enum HudTone { Wumpa, Gem, Lost }
+
+    public static Vector2 HudTextSize(string text, float px) =>
+        Display(px).CalcTextSizeA(px, float.MaxValue, 0f, text);
+
+    /// <summary>In-game HUD text (box counter): the logo treatment, any size.</summary>
+    public static void HudText(ImDrawListPtr dl, string text, Vector2 pos, float px, HudTone tone)
+    {
+        var (top, bottom) = tone switch
+        {
+            HudTone.Gem => (Rgb(255, 255, 255), Rgb(120, 200, 255)),
+            HudTone.Lost => (Rgb(170, 164, 150), Rgb(120, 114, 102)),
+            _ => (Rgb(255, 196, 48), Wumpa),
+        };
+        OutlinedTitle(dl, Display(px), px, pos, text, px / 30f, top, bottom);
+    }
+
+    /// <summary>Wooden crate icon for the box counter, <paramref name="s"/> px square.</summary>
+    public static void HudCrate(ImDrawListPtr dl, Vector2 min, float s, bool faded)
+    {
+        float a = faded ? 0.45f : 1f;
+        var max = min + new Vector2(s);
+        float edge = Math.Max(1f, s * 0.14f);
+        dl.AddRectFilled(min + new Vector2(0f, s * 0.08f), max + new Vector2(0f, s * 0.08f), U32(Vector4.Zero, 0.55f * a));
+        dl.AddRectFilled(min, max, U32(CrateCore, a));
+        dl.AddRectFilled(min + new Vector2(edge), max - new Vector2(edge), U32(Rgb(196, 112, 36), a));
+        // Planks and the diagonal brace of the Crash 1 crate.
+        uint dark = U32(Rgb(120, 62, 14), a);
+        float third = (s - 2f * edge) / 3f;
+        for (int i = 1; i < 3; i++)
+        {
+            float y = min.Y + edge + third * i;
+            dl.AddLine(new Vector2(min.X + edge, y), new Vector2(max.X - edge, y), dark, Math.Max(1f, s * 0.04f));
+        }
+        dl.AddLine(min + new Vector2(edge, s - edge), min + new Vector2(s - edge, edge), U32(CrateCore, a), edge * 0.9f);
+        dl.AddRect(min, max, U32(Rgb(36, 18, 4), a), 0f, ImDrawFlags.None, Math.Max(1f, s * 0.05f));
     }
 
     /// <summary>Tiny Wumpa fruit used as the menu cursor.</summary>

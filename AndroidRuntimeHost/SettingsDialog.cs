@@ -108,6 +108,11 @@ static class SettingsDialog
             "A gamepad left stick steers Crash in any direction, not only the 8 of the D-pad. Touch controls and D-pad are unchanged.",
             bodyFont));
 
+        var boxCounter = AddSwitch(activity, card, "Box counter", view.BoxCounter, bodyBold);
+        card.AddView(Hint(activity,
+            "Shows boxes broken / boxes needed for the gem in the corner during levels. Turns gray when a death loses the gem: Crash 1 forgets the boxes broken before the last checkpoint.",
+            bodyFont));
+
         if (gpuLabRequested != null)
         {
             card.AddView(Hint(activity, "Diagnostics", bodyBold), Margin(activity, top: 10, bottom: 2));
@@ -166,6 +171,7 @@ static class SettingsDialog
             view.CrtFilter = crtFilter.Checked;
             view.SaveLives = saveLives.Checked;
             view.AnalogMovement = analogMovement.Checked;
+            view.BoxCounter = boxCounter.Checked;
 
             ConfigManager.SaveGame();
             ConfigManager.SaveView(Array.Empty<RecompOne.Runtime.Host.Window.IPanel>());

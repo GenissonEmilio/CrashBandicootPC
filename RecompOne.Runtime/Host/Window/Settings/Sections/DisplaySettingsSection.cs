@@ -76,6 +76,14 @@ internal sealed class DisplaySettingsSection : ISettingsSection
         }
         ImGui.TextDisabled("Curved CRT TV look by Mattias Gustavsson");
 
+        bool boxes = ConfigManager.View.BoxCounter;
+        if (ImGui.Checkbox("Box counter", ref boxes))
+        {
+            ConfigManager.View.BoxCounter = boxes;
+            ConfigManager.SaveView(PanelManager.Panels);
+        }
+        ImGui.TextDisabled("Boxes broken / boxes needed for the gem, in the corner");
+
         bool vsync = ConfigManager.View.VSync;
         if (ImGui.Checkbox("VSync", ref vsync))
         {

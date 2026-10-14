@@ -37,6 +37,7 @@ public sealed class MainActivity : Activity
     FrameLayout.LayoutParams? _statusLayout;
     DevMenuOverlay? _devMenu;
     TextView? _devHud;
+    TextView? _boxHud;
     DiscDocuments? _disc;
     TouchControllerView? _touchOverlay;
     bool _usingLocalDiscCopy;
@@ -98,6 +99,7 @@ public sealed class MainActivity : Activity
         _gameUiVisible = false;
         _devMenu = null;
         _devHud = null;
+        _boxHud = null;
         _touchOverlay = null;
         _launcher = new LauncherScreen(this);
         _launcher.SelectDiscRequested += PickDiscFolder;
@@ -180,6 +182,24 @@ public sealed class MainActivity : Activity
         {
             TopMargin = Dp(52),
             RightMargin = Dp(10),
+        });
+
+        // Box counter (#131): bottom-left, or mid-left above the touch D-pad.
+        _boxHud = new TextView(this)
+        {
+            TextSize = 22,
+            Visibility = ViewStates.Gone,
+        };
+        try { _boxHud.SetTypeface(Android.Graphics.Typeface.CreateFromAsset(Assets, "Fonts/Bungee-Regular.ttf"), Android.Graphics.TypefaceStyle.Normal); }
+        catch { _boxHud.SetTypeface(Android.Graphics.Typeface.DefaultBold, Android.Graphics.TypefaceStyle.Normal); }
+        _boxHud.SetShadowLayer(Dp(3), 0, Dp(2), Color.Argb(230, 36, 18, 4));
+        _boxHud.CompoundDrawablePadding = Dp(8);
+        root.AddView(_boxHud, new FrameLayout.LayoutParams(
+            ViewGroup.LayoutParams.WrapContent, ViewGroup.LayoutParams.WrapContent,
+            GravityFlags.Left | (touchSettings.Enabled ? GravityFlags.CenterVertical : GravityFlags.Bottom))
+        {
+            LeftMargin = Dp(18),
+            BottomMargin = Dp(14),
         });
 
         var devButton = new Button(this)
@@ -627,6 +647,7 @@ public sealed class MainActivity : Activity
                     ConfigManager.View.InternalResolution <= 1;
                 host = new AndroidPlatformHost(this, _status, _progress, egl, backend, diagnostics);
                 host.AttachHud(_devHud);
+                host.AttachBoxHud(_boxHud);
                 _activeHost = host;
                 RecompOne.Runtime.Runtime.SetPlatformHost(host);
                 GameLoader.Run(gameDll, cuePath);

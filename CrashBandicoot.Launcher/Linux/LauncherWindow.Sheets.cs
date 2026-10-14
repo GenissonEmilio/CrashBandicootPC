@@ -268,6 +268,7 @@ sealed partial class LauncherWindow
         var crtFilter = Nav(new ThemeCheck("CRT filter (MattiasCRT)") { Checked = view.CrtFilter });
         var saveLives = Nav(new ThemeCheck("Save lives to memory card") { Checked = view.SaveLives });
         var analogMovement = Nav(new ThemeCheck("Analog movement (left stick)") { Checked = view.AnalogMovement });
+        var boxCounter = Nav(new ThemeCheck("Box counter") { Checked = view.BoxCounter });
 
         var strengthRow = Row(Label("Filter strength", 202), strength, 30);
         void SyncStrength() => strengthRow.IsVisible = ComboValue(texFilter, 0) != 0;
@@ -299,7 +300,9 @@ sealed partial class LauncherWindow
                 WithMargin(saveLives, new Thickness(0, 0, 0, 14)),
                 Hint("Load Game restores the lives you had when you saved, like Crash 2 and 3. Off: every load starts with 4 lives, as in the original."),
                 WithMargin(analogMovement, new Thickness(0, 0, 0, 14)),
-                Hint("The gamepad left stick steers Crash in any direction, not only the 8 of the D-pad. D-pad and keyboard are unchanged.", 8),
+                Hint("The gamepad left stick steers Crash in any direction, not only the 8 of the D-pad. D-pad and keyboard are unchanged."),
+                WithMargin(boxCounter, new Thickness(0, 0, 0, 14)),
+                Hint("Shows boxes broken / boxes needed for the gem in the corner during levels. Turns gray when a death loses the gem: Crash 1 forgets the boxes broken before the last checkpoint.", 8),
             },
         };
 
@@ -320,6 +323,7 @@ sealed partial class LauncherWindow
             view.CrtFilter = crtFilter.Checked;
             view.SaveLives = saveLives.Checked;
             view.AnalogMovement = analogMovement.Checked;
+            view.BoxCounter = boxCounter.Checked;
             ConfigManager.SaveGame();
             SaveView();
             CloseSheet();

@@ -756,6 +756,7 @@ internal static class HostWindow
         Modding.ModLoadingPopup.Draw();
         NoticePopup.Draw();
         if (StartupNotice.NeedsAck) StartupNotice.Draw();
+        BoxCounterOverlay.Draw();
         DevHudOverlay.Draw();
         gl.BindFramebuffer(FramebufferTarget.Framebuffer, 0);
         gl.Viewport(0, 0, (uint)fbDef.X, (uint)fbDef.Y);

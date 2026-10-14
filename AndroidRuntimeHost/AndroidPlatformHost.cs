@@ -30,6 +30,9 @@ sealed class AndroidPlatformHost(
     long _hudWindow = System.Diagnostics.Stopwatch.GetTimestamp();
     int _hudFrames;
     double _hudFps;
+    TextView? _boxHud;
+    string? _boxText;
+    int _boxTone = -1;
 
     public static double LastFps { get; private set; }
 
@@ -38,6 +41,7 @@ sealed class AndroidPlatformHost(
     public void AttachAudio(Spu? spu) => _audio.Attach(spu);
     public void SetMasterVolume(float volume) => _audio.SetMasterVolume(volume);
     public void AttachHud(TextView? hud) => _hud = hud;
+    public void AttachBoxHud(TextView? hud) => _boxHud = hud;
     public void ShowNotice(string message) => SetStatus(message);
     public void PauseAudio()
     {
@@ -56,6 +60,7 @@ sealed class AndroidPlatformHost(
         CheatManager.Apply();
         Runtime.RamLog.Tick();
         TickHud();
+        TickBoxHud();
 
         if (gpu == null || !gpu.DisplayEnabled || !backend.Ready)
             return;
@@ -175,6 +180,48 @@ sealed class AndroidPlatformHost(
         {
             if (_hud == null) return;
             _hud.Text = text;
+        });
+    }
+
+    /// <summary>Box counter (#131); the view is touched only when the text or color changes.</summary>
+    void TickBoxHud()
+    {
+        if (_boxHud == null) return;
+        string? text = null;
+        int tone = 0;
+        if (RecompOne.Runtime.Host.BoxCounter.TryRead(out var r))
+        {
+            text = $"{r.Broken}/{r.Total}";
+            tone = r.Lost ? 2 : r.Complete ? 1 : 0;
+        }
+        if (text == _boxText && tone == _boxTone) return;
+        _boxText = text;
+        _boxTone = tone;
+
+        activity.RunOnUiThread(() =>
+        {
+            var view = _boxHud;
+            if (view == null) return;
+            if (text == null)
+            {
+                view.Visibility = Android.Views.ViewStates.Gone;
+                return;
+            }
+            float density = view.Resources?.DisplayMetrics?.Density ?? 1f;
+            int size = (int)(22 * density);
+            var crate = new Android.Graphics.Drawables.GradientDrawable();
+            crate.SetColor(tone == 2 ? Android.Graphics.Color.Argb(120, 196, 112, 36) : Android.Graphics.Color.Rgb(196, 112, 36));
+            crate.SetStroke(Math.Max(2, (int)(3 * density)), tone == 2 ? Android.Graphics.Color.Argb(120, 58, 32, 8) : Android.Graphics.Color.Rgb(58, 32, 8));
+            crate.SetSize(size, size);
+            view.SetCompoundDrawablesWithIntrinsicBounds(crate, null, null, null);
+            view.SetTextColor(tone switch
+            {
+                1 => Android.Graphics.Color.Rgb(150, 215, 255),
+                2 => Android.Graphics.Color.Rgb(150, 144, 132),
+                _ => Android.Graphics.Color.Rgb(255, 176, 32),
+            });
+            view.Text = text;
+            view.Visibility = Android.Views.ViewStates.Visible;
         });
     }
 
