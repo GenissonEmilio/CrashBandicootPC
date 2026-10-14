@@ -17,6 +17,10 @@ internal sealed class SettingsPopup : IPanel
         ImGui.SetNextWindowSize(new Vector2(760, 470), ImGuiCond.FirstUseEver);
         ImGui.SetNextWindowPos(vp.GetCenter(), ImGuiCond.FirstUseEver, new Vector2(0.5f, 0.5f));
 
+        // Opened from the pause menu: same launcher colors and font when the Crash style is on.
+        float ui = Math.Clamp(ImGui.GetIO().FontGlobalScale, 1f, 2.5f);
+        using var theme = CrashUi.Enabled ? CrashUi.Theme(ui, card: false) : default;
+
         bool open = IsOpen;
         if (!ImGui.Begin(Name, ref open,
                 ImGuiWindowFlags.NoCollapse | ImGuiWindowFlags.NoDocking | ImGuiWindowFlags.NoSavedSettings))

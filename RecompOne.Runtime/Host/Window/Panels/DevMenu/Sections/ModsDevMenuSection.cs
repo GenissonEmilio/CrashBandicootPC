@@ -4,7 +4,7 @@ using RecompOne.Runtime.Modding;
 
 namespace RecompOne.Runtime.Host.Window;
 
-/// <summary>Mods list, asset reload and mod-registered menus (all also in the F1 menu bar).</summary>
+/// <summary>Mods list, asset reload and mod-registered menus (their only home since the top bar was slimmed).</summary>
 internal sealed class ModsDevMenuSection : IDevMenuSection
 {
     public string Id => "mods";

@@ -671,6 +671,7 @@ internal static class HostWindow
         io.ConfigFlags |= ImGuiConfigFlags.NavEnableKeyboard;
         io.ConfigWindowsMoveFromTitleBarOnly = true;
         unsafe { io.NativePtr->IniFilename = null; }
+        CrashUi.LoadFonts();
 
         // Load saved sizes/positions for debug panels, but always re-dock Output
         // to the center — a bad interface.ini (or launcher SaveView with a stale

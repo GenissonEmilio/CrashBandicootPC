@@ -305,6 +305,16 @@ public class ViewConfig
         set => SetBool("ShowDevHud", value);
     }
 
+    /// <summary>
+    /// Pause menu, Developer Menu and Settings drawn in the launcher look (Bungee /
+    /// Nunito, Wumpa colors). Off = the plain gray ImGui menus. On by default.
+    /// </summary>
+    public bool CrashMenuStyle
+    {
+        get => GetBool("CrashMenuStyle", true);
+        set => SetBool("CrashMenuStyle", value);
+    }
+
     /// <summary>Keys 1–5 switch frame-rate presets during gameplay. On by default.</summary>
     public bool FrameRateHotkeys
     {

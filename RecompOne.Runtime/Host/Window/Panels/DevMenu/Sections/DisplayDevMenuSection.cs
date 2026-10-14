@@ -54,7 +54,15 @@ internal sealed class DisplayDevMenuSection : IDevMenuSection
             ConfigManager.View.HideTopBar = !showBar;
             ConfigManager.SaveView(PanelManager.Panels);
         }
-        ImGuiEx.TextDisabled("Debug tools bar, off by default (F1)");
+        ImGuiEx.TextDisabled("Top bar with a Dev Menu button, off by default (F1)");
+
+        bool crashMenus = ConfigManager.View.CrashMenuStyle;
+        if (ImGui.Checkbox("Crash menu style", ref crashMenus))
+        {
+            ConfigManager.View.CrashMenuStyle = crashMenus;
+            ConfigManager.SaveView(PanelManager.Panels);
+        }
+        ImGuiEx.TextDisabled("Launcher look for pause, Dev Menu and Settings");
         ImGuiEx.TextDisabled("More options: Rendering");
     }
 }

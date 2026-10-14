@@ -10,7 +10,7 @@ internal sealed class DebugDevMenuSection : IDevMenuSection
 
     public void Draw()
     {
-        ImGuiEx.TextDisabled("Debug tools (also in the F1 menu bar)");
+        ImGuiEx.TextDisabled("Debug tool windows");
         ImGui.Spacing();
 
         ImGui.TextUnformatted("GPU");

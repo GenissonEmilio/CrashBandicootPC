@@ -14,10 +14,15 @@ internal sealed class DevMenuPopup : IPanel
 
     const float ListWidth = 230f;
     const float SectionWidth = 300f;
+    const float CrashListWidth = 210f;
+    const float CrashSectionWidth = 320f;
+    /// <summary>See-through card: the menu often stays open while playing.</summary>
+    const float CrashOpacity = 0.72f;
 
     bool _open;
     bool _focusOnce;
     bool _inSection;
+    bool _bodyScrolls;
     string _sectionId = "";
 
     public bool IsOpen
@@ -63,14 +68,21 @@ internal sealed class DevMenuPopup : IPanel
     {
         var vp = ImGui.GetMainViewport();
         float ui = Math.Clamp(ImGui.GetIO().FontGlobalScale, 1f, 2.5f);
-        float width = (_inSection ? SectionWidth : ListWidth) * ui;
+        bool crash = CrashUi.Enabled;
+        float width = crash
+            ? (_inSection ? CrashSectionWidth : CrashListWidth) * ui
+            : (_inSection ? SectionWidth : ListWidth) * ui;
 
         // Fixed width; height grows with content (no empty ##selectables — those broke hit-testing).
         ImGui.SetNextWindowSize(new Vector2(width, 0f), ImGuiCond.Always);
         ImGui.SetNextWindowSizeConstraints(
             new Vector2(width, 0f),
-            new Vector2(width, vp.WorkSize.Y * 0.85f));
-        ImGui.SetNextWindowPos(vp.WorkPos + new Vector2(12 * ui, 40 * ui), ImGuiCond.FirstUseEver);
+            new Vector2(width, vp.WorkSize.Y * 0.9f));
+        // Crash card has no title bar to drag: pin it to the top-left like the Android menu.
+        if (crash)
+            ImGui.SetNextWindowPos(vp.WorkPos + new Vector2(12 * ui, 12 * ui), ImGuiCond.Always);
+        else
+            ImGui.SetNextWindowPos(vp.WorkPos + new Vector2(12 * ui, 40 * ui), ImGuiCond.FirstUseEver);
 
         if (!_focusOnce)
         {
@@ -78,68 +90,57 @@ internal sealed class DevMenuPopup : IPanel
             _focusOnce = true;
         }
 
-        ImGui.PushStyleVar(ImGuiStyleVar.WindowRounding, 0f);
-        ImGui.PushStyleVar(ImGuiStyleVar.WindowBorderSize, 1f);
-        ImGui.PushStyleVar(ImGuiStyleVar.WindowPadding, new Vector2(10 * ui, 8 * ui));
-        ImGui.PushStyleColor(ImGuiCol.WindowBg, new Vector4(0.14f, 0.14f, 0.14f, 0.82f));
-        ImGui.PushStyleColor(ImGuiCol.Border, new Vector4(0.5f, 0.5f, 0.5f, 0.45f));
-        ImGui.PushStyleColor(ImGuiCol.TitleBg, new Vector4(0.16f, 0.16f, 0.16f, 0.9f));
-        ImGui.PushStyleColor(ImGuiCol.TitleBgActive, new Vector4(0.18f, 0.18f, 0.18f, 0.9f));
-        ImGui.PushStyleColor(ImGuiCol.Header, new Vector4(0.28f, 0.28f, 0.28f, 0.55f));
-        ImGui.PushStyleColor(ImGuiCol.HeaderHovered, new Vector4(0.34f, 0.34f, 0.3f, 0.75f));
-        ImGui.PushStyleColor(ImGuiCol.HeaderActive, new Vector4(0.4f, 0.38f, 0.22f, 0.85f));
+        using var chrome = CrashUi.Card(ui, new Vector2(10 * ui, 8 * ui), 0.82f, CrashOpacity);
 
+        // NoScrollbar: auto-fit at fractional UI scales left the content a fraction of a
+        // pixel taller than the window, so an always-full scrollbar showed. Long sections
+        // scroll inside their own body child instead.
         bool open = _open;
         var flags = ImGuiWindowFlags.NoCollapse
                     | ImGuiWindowFlags.NoDocking
                     | ImGuiWindowFlags.NoSavedSettings
+                    | ImGuiWindowFlags.NoScrollbar
                     | ImGuiWindowFlags.AlwaysAutoResize;
+        if (crash) flags |= ImGuiWindowFlags.NoTitleBar | ImGuiWindowFlags.NoMove;
 
         if (!ImGui.Begin(Name, ref open, flags))
         {
             IsOpen = open;
             ImGui.End();
-            PopChrome();
             return;
         }
 
         if (_inSection && ImGui.IsKeyPressed(ImGuiKey.Backspace))
             _inSection = false;
 
+        CrashUi.CardDecor(ui);
         var sections = DevMenuRegistry.Sections;
-        if (!_inSection)
-            DrawRootList(sections);
-        else
-            DrawSectionPage(sections, ui);
+        bool close = !_inSection
+            ? DrawRootList(sections, ui)
+            : DrawSectionPage(sections, ui);
+        if (close) open = false;
 
         IsOpen = open;
         ImGui.End();
-        PopChrome();
     }
 
-    static void PopChrome()
+    /// <returns>True when the header close button was clicked.</returns>
+    bool DrawRootList(IReadOnlyList<IDevMenuSection> sections, float ui)
     {
-        ImGui.PopStyleColor(7);
-        ImGui.PopStyleVar(3);
-    }
-
-    void DrawRootList(IReadOnlyList<IDevMenuSection> sections)
-    {
-        ImGui.PushStyleColor(ImGuiCol.Text, ImGui.GetStyle().Colors[(int)ImGuiCol.TextDisabled]);
-        ImGui.TextUnformatted("DEVELOPER");
-        ImGui.PopStyleColor();
-        ImGui.Separator();
-        ImGui.Spacing();
+        bool crash = CrashUi.Enabled;
+        bool close = crash
+            ? CrashUi.Header($"Crash Recompiled v{AppVersion.Version}", "Dev Menu", ui, closeButton: true, titlePx: 22f)
+            : CrashUi.Header("", "Developer", ui);
 
         if (sections.Count == 0)
         {
             ImGuiEx.TextDisabled("No sections.");
-            return;
+            return close;
         }
 
         foreach (var s in sections)
         {
-            if (BookRow($"{s.Title}...", s.Id))
+            if (CrashUi.Row($"{s.Title}...", s.Id, ui, px: 15f))
             {
                 _sectionId = s.Id;
                 ConfigManager.View.DevMenuSection = s.Id;
@@ -148,37 +149,57 @@ internal sealed class DevMenuPopup : IPanel
             }
         }
 
-        ImGui.Spacing();
-        ImGui.Separator();
-        ImGuiEx.TextDisabled($"Toggle: {ConfigManager.View.CheatMenuKey} · Menu bar: F1");
-        ImGuiEx.TextDisabled($"Version {AppVersion.Version}");
+        CrashUi.Divider(ui);
+        CrashUi.Hints(ui, (ConfigManager.View.CheatMenuKey, "Close"), ("F1", "Top bar"));
+        if (!crash) // Crash style shows the version in the header
+            ImGuiEx.TextDisabled($"Version {AppVersion.Version}");
+        return close;
     }
 
-    void DrawSectionPage(IReadOnlyList<IDevMenuSection> sections, float ui)
+    /// <returns>True when the header close button was clicked.</returns>
+    bool DrawSectionPage(IReadOnlyList<IDevMenuSection> sections, float ui)
     {
-        if (BookRow("< Back", "back"))
+        var section = FindSection(sections, _sectionId);
+        bool close = false;
+        if (CrashUi.Enabled)
+            close = CrashUi.Header("Dev Menu", section?.Title ?? "Dev Menu", ui, closeButton: true, titlePx: 22f);
+
+        if (CrashUi.Row("< Back", "dev-back", ui, px: 13f))
         {
             _inSection = false;
-            return;
+            return close;
         }
 
-        ImGui.Separator();
-        ImGui.Spacing();
+        if (!CrashUi.Enabled)
+        {
+            ImGui.Separator();
+            ImGui.Spacing();
+        }
 
-        var section = FindSection(sections, _sectionId);
         if (section == null)
         {
             ImGuiEx.TextDisabled("Section not found.");
-            return;
+            return close;
         }
 
-        ImGui.TextUnformatted(section.Title.ToUpperInvariant());
-        ImGui.Spacing();
+        if (CrashUi.Enabled)
+            CrashUi.Divider(ui);
+        else
+        {
+            ImGui.TextUnformatted(section.Title.ToUpperInvariant());
+            ImGui.Spacing();
+        }
 
-        float maxBody = ImGui.GetMainViewport().WorkSize.Y * 0.55f;
-        ImGui.BeginChild("##dev-section-body", new Vector2(0f, maxBody), ImGuiChildFlags.None);
+        // Body shrinks to short sections and scrolls past the cap. The scrollbar is only
+        // shown when last frame really overflowed (fit rounding alone must not show one).
+        float maxBody = ImGui.GetMainViewport().WorkSize.Y * 0.6f;
+        ImGui.SetNextWindowSizeConstraints(Vector2.Zero, new Vector2(float.MaxValue, maxBody));
+        ImGui.BeginChild("##dev-section-body", Vector2.Zero, ImGuiChildFlags.AutoResizeY,
+            _bodyScrolls ? ImGuiWindowFlags.None : ImGuiWindowFlags.NoScrollbar);
         section.Draw();
+        _bodyScrolls = ImGui.GetScrollMaxY() > 1f;
         ImGui.EndChild();
+        return close;
     }
 
     static IDevMenuSection? FindSection(IReadOnlyList<IDevMenuSection> sections, string id)
@@ -186,25 +207,5 @@ internal sealed class DevMenuPopup : IPanel
         foreach (var s in sections)
             if (s.Id == id) return s;
         return null;
-    }
-
-    /// <summary>
-    /// ND-style row. Label is real Selectable text (defines hitbox + auto-size).
-    /// Yellow ">" is painted in the leading gutter on hover.
-    /// </summary>
-    static bool BookRow(string label, string id)
-    {
-        // Leading spaces reserve room for the cursor glyph.
-        bool clicked = ImGui.Selectable($"  {label}##{id}");
-        if (ImGui.IsItemHovered() || ImGui.IsItemActive())
-        {
-            var min = ImGui.GetItemRectMin();
-            float y = min.Y + (ImGui.GetItemRectSize().Y - ImGui.GetTextLineHeight()) * 0.5f;
-            ImGui.GetWindowDrawList().AddText(
-                new Vector2(min.X, y),
-                ImGui.ColorConvertFloat4ToU32(new Vector4(1f, 0.92f, 0.4f, 1f)),
-                ">");
-        }
-        return clicked;
     }
 }

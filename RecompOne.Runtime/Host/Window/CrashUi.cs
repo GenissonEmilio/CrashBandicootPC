@@ -1,0 +1,507 @@
+using System.Numerics;
+using ImGuiNET;
+using RecompOne.Runtime.Config;
+
+namespace RecompOne.Runtime.Host.Window;
+
+/// <summary>
+/// Launcher look for the in-game menus (pause, Developer Menu, Settings): Bungee rows,
+/// Nunito body text and the Wumpa / Sand palette of the launcher. Without the launcher
+/// fonts (other hosts) the same colors are drawn with ImGui's font.
+/// <see cref="ViewConfig.CrashMenuStyle"/> off = the plain gray menus.
+/// </summary>
+internal static class CrashUi
+{
+    public static readonly Vector4 Night = Rgb(6, 16, 24);
+    public static readonly Vector4 CardTop = Rgb(22, 51, 37);
+    public static readonly Vector4 CardBottom = Rgb(12, 22, 24);
+    public static readonly Vector4 Wumpa = Rgb(255, 138, 0);
+    public static readonly Vector4 WumpaHot = Rgb(255, 176, 32);
+    public static readonly Vector4 Sand = Rgb(244, 228, 188);
+    public static readonly Vector4 Muted = Rgb(176, 166, 140);
+    public static readonly Vector4 Disabled = Rgb(122, 117, 104, 0.6f);
+    public static readonly Vector4 CrateCore = Rgb(58, 32, 8);
+    public static readonly Vector4 MarkRed = Rgb(224, 24, 24);
+    static readonly Vector4 Leaf = Rgb(86, 168, 52);
+
+    // Fonts are baked once; ≥2x bakes stay sharp up to the 2.25x UI scale.
+    const float BodyPx = 14f;
+    const float BodyBake = 28f;
+    const float DisplaySmallBake = 40f;
+    const float DisplayLargeBake = 72f;
+
+    static ImFontPtr? _body, _bodyBold, _displaySmall, _displayLarge;
+    static readonly Dictionary<string, float> _hot = new();
+
+    public static bool Enabled => ConfigManager.View.CrashMenuStyle;
+
+    /// <summary>
+    /// Adds the launcher fonts (Ui/fonts next to the exe) to the atlas. Must run before
+    /// the atlas is built (ImGuiController onConfigureIO). ImGui's font stays the default.
+    /// </summary>
+    public static void LoadFonts()
+    {
+        try
+        {
+            string dir = Path.Combine(AppContext.BaseDirectory, "Ui", "fonts");
+            string bungee = Path.Combine(dir, "Bungee-Regular.ttf");
+            string semi = Path.Combine(dir, "Nunito-SemiBold.ttf");
+            string extra = Path.Combine(dir, "Nunito-ExtraBold.ttf");
+            if (!File.Exists(bungee) && !File.Exists(semi)) return;
+
+            var fonts = ImGui.GetIO().Fonts;
+            fonts.AddFontDefault(); // first font = default for the debug panels
+            _body = Add(fonts, semi, BodyBake, BodyPx, oversample: 2);
+            _bodyBold = Add(fonts, extra, BodyBake, BodyPx, oversample: 2);
+            _displaySmall = Add(fonts, bungee, DisplaySmallBake, DisplaySmallBake, oversample: 1);
+            _displayLarge = Add(fonts, bungee, DisplayLargeBake, DisplayLargeBake, oversample: 1);
+        }
+        catch (Exception e)
+        {
+            Console.WriteLine($"[CrashUi] launcher fonts not loaded: {e.Message}");
+        }
+    }
+
+    static unsafe ImFontPtr? Add(ImFontAtlasPtr fonts, string path, float bakePx, float drawPx, int oversample)
+    {
+        if (!File.Exists(path)) return null;
+        var cfg = new ImFontConfigPtr(ImGuiNative.ImFontConfig_ImFontConfig());
+        cfg.OversampleH = oversample;
+        cfg.OversampleV = 1;
+        var font = fonts.AddFontFromFileTTF(path, bakePx, cfg);
+        cfg.Destroy();
+        if (font.NativePtr == null) return null;
+        // Widgets size text as FontSize * Scale * FontGlobalScale.
+        font.Scale = drawPx / bakePx;
+        return font;
+    }
+
+    static ImFontPtr Display(float px)
+    {
+        if (px <= DisplaySmallBake && _displaySmall is { } small) return small;
+        return _displayLarge ?? _displaySmall ?? ImGui.GetFont();
+    }
+
+    static ImFontPtr Body => _body ?? ImGui.GetFont();
+    static ImFontPtr BodyBold => _bodyBold ?? _body ?? ImGui.GetFont();
+
+    /// <summary>Pops whatever <see cref="Theme"/> / <see cref="Classic"/> pushed. Dispose after End().</summary>
+    public readonly struct Scope(int colors, int vars, bool font) : IDisposable
+    {
+        public void Dispose()
+        {
+            if (font) ImGui.PopFont();
+            if (colors > 0) ImGui.PopStyleColor(colors);
+            if (vars > 0) ImGui.PopStyleVar(vars);
+        }
+    }
+
+    /// <summary>Crash style for a menu card, or the old gray chrome when the style is off.</summary>
+    public static Scope Card(float ui, Vector2 classicPadding, float classicAlpha, float bgAlpha = 0.96f)
+        => Enabled ? Theme(ui, card: true, bgAlpha) : Classic(classicPadding, classicAlpha);
+
+    /// <summary>Crash colors, rounding and body font for one window and its popups.</summary>
+    public static Scope Theme(float ui, bool card, float bgAlpha = 0.96f)
+    {
+        int c = 0, v = 0;
+        void C(ImGuiCol col, Vector4 value) { ImGui.PushStyleColor(col, value); c++; }
+        void F(ImGuiStyleVar sv, float value) { ImGui.PushStyleVar(sv, value); v++; }
+        void V(ImGuiStyleVar sv, Vector2 value) { ImGui.PushStyleVar(sv, value); v++; }
+
+        C(ImGuiCol.WindowBg, A(CardBottom, bgAlpha));
+        C(ImGuiCol.ChildBg, Vector4.Zero);
+        C(ImGuiCol.PopupBg, A(Night, 0.98f));
+        C(ImGuiCol.Border, A(Wumpa, 0.4f));
+        C(ImGuiCol.BorderShadow, Vector4.Zero);
+        C(ImGuiCol.Text, Sand);
+        C(ImGuiCol.TextDisabled, Muted);
+        C(ImGuiCol.TextSelectedBg, A(Wumpa, 0.35f));
+        C(ImGuiCol.TitleBg, Night);
+        C(ImGuiCol.TitleBgActive, CardTop);
+        C(ImGuiCol.TitleBgCollapsed, Night);
+        C(ImGuiCol.FrameBg, A(Sand, 0.07f));
+        C(ImGuiCol.FrameBgHovered, A(Wumpa, 0.18f));
+        C(ImGuiCol.FrameBgActive, A(Wumpa, 0.28f));
+        C(ImGuiCol.CheckMark, WumpaHot);
+        C(ImGuiCol.SliderGrab, Wumpa);
+        C(ImGuiCol.SliderGrabActive, WumpaHot);
+        C(ImGuiCol.Button, A(Wumpa, 0.18f));
+        C(ImGuiCol.ButtonHovered, A(Wumpa, 0.38f));
+        C(ImGuiCol.ButtonActive, A(Wumpa, 0.55f));
+        C(ImGuiCol.Header, A(Wumpa, 0.2f));
+        C(ImGuiCol.HeaderHovered, A(Wumpa, 0.32f));
+        C(ImGuiCol.HeaderActive, A(Wumpa, 0.45f));
+        C(ImGuiCol.Separator, A(Sand, 0.14f));
+        C(ImGuiCol.ScrollbarBg, Vector4.Zero);
+        C(ImGuiCol.ScrollbarGrab, A(Wumpa, 0.35f));
+        C(ImGuiCol.ScrollbarGrabHovered, A(Wumpa, 0.55f));
+        C(ImGuiCol.ScrollbarGrabActive, A(WumpaHot, 0.7f));
+        C(ImGuiCol.ResizeGrip, A(Wumpa, 0.2f));
+        C(ImGuiCol.ResizeGripHovered, A(Wumpa, 0.45f));
+        C(ImGuiCol.ResizeGripActive, A(Wumpa, 0.7f));
+        C(ImGuiCol.TableHeaderBg, A(Wumpa, 0.15f));
+        C(ImGuiCol.TableBorderStrong, A(Sand, 0.15f));
+        C(ImGuiCol.TableBorderLight, A(Sand, 0.08f));
+        C(ImGuiCol.TableRowBg, Vector4.Zero);
+        C(ImGuiCol.TableRowBgAlt, A(Sand, 0.03f));
+        C(ImGuiCol.NavHighlight, A(WumpaHot, 0.5f));
+
+        F(ImGuiStyleVar.WindowRounding, (card ? 10f : 8f) * ui);
+        F(ImGuiStyleVar.ChildRounding, 6f * ui);
+        F(ImGuiStyleVar.FrameRounding, 5f * ui);
+        F(ImGuiStyleVar.PopupRounding, 8f * ui);
+        F(ImGuiStyleVar.GrabRounding, 5f * ui);
+        F(ImGuiStyleVar.ScrollbarRounding, 6f * ui);
+        F(ImGuiStyleVar.WindowBorderSize, 1.5f);
+        if (card)
+        {
+            V(ImGuiStyleVar.WindowPadding, new Vector2(12f, 10f) * ui);
+            V(ImGuiStyleVar.ItemSpacing, new Vector2(8f, 4f) * ui);
+            V(ImGuiStyleVar.FramePadding, new Vector2(6f, 3f) * ui);
+            // Thin scrollbar; only scrolling child regions show one (cards use NoScrollbar).
+            F(ImGuiStyleVar.ScrollbarSize, 8f * ui);
+        }
+
+        bool font = _body.HasValue;
+        if (font) ImGui.PushFont(_body!.Value);
+        return new Scope(c, v, font);
+    }
+
+    /// <summary>The pre-2.1 gray book chrome.</summary>
+    public static Scope Classic(Vector2 padding, float bgAlpha)
+    {
+        ImGui.PushStyleVar(ImGuiStyleVar.WindowRounding, 0f);
+        ImGui.PushStyleVar(ImGuiStyleVar.WindowBorderSize, 1f);
+        ImGui.PushStyleVar(ImGuiStyleVar.WindowPadding, padding);
+        ImGui.PushStyleColor(ImGuiCol.WindowBg, new Vector4(0.14f, 0.14f, 0.14f, bgAlpha));
+        ImGui.PushStyleColor(ImGuiCol.Border, new Vector4(0.5f, 0.5f, 0.5f, 0.45f));
+        ImGui.PushStyleColor(ImGuiCol.TitleBg, new Vector4(0.16f, 0.16f, 0.16f, Math.Min(1f, bgAlpha + 0.05f)));
+        ImGui.PushStyleColor(ImGuiCol.TitleBgActive, new Vector4(0.18f, 0.18f, 0.18f, Math.Min(1f, bgAlpha + 0.05f)));
+        ImGui.PushStyleColor(ImGuiCol.Header, new Vector4(0.28f, 0.28f, 0.28f, 0.55f));
+        ImGui.PushStyleColor(ImGuiCol.HeaderHovered, new Vector4(0.34f, 0.34f, 0.3f, 0.75f));
+        ImGui.PushStyleColor(ImGuiCol.HeaderActive, new Vector4(0.4f, 0.38f, 0.22f, 0.85f));
+        return new Scope(7, 3, false);
+    }
+
+    /// <summary>Bold body font for small UI outside a themed window (menu bar). Pair with PopFont.</summary>
+    public static bool PushBodyBold()
+    {
+        if (!_bodyBold.HasValue) return false;
+        ImGui.PushFont(_bodyBold.Value);
+        return true;
+    }
+
+    /// <summary>Full-screen launcher gradient behind a modal card (old style: flat dim).</summary>
+    public static void Backdrop(string id, ImGuiViewportPtr vp, float ui)
+    {
+        ImGui.SetNextWindowPos(vp.Pos);
+        ImGui.SetNextWindowSize(vp.Size);
+        const ImGuiWindowFlags flags =
+            ImGuiWindowFlags.NoDecoration
+            | ImGuiWindowFlags.NoSavedSettings
+            | ImGuiWindowFlags.NoFocusOnAppearing
+            | ImGuiWindowFlags.NoNav
+            | ImGuiWindowFlags.NoMove
+            | ImGuiWindowFlags.NoInputs
+            | ImGuiWindowFlags.NoBringToFrontOnFocus;
+        bool crash = Enabled;
+        ImGui.PushStyleVar(ImGuiStyleVar.WindowPadding, Vector2.Zero);
+        ImGui.PushStyleVar(ImGuiStyleVar.WindowBorderSize, 0f);
+        ImGui.PushStyleColor(ImGuiCol.WindowBg, crash ? Vector4.Zero : new Vector4(0f, 0f, 0f, 0.45f));
+        if (ImGui.Begin(id, flags) && crash)
+        {
+            var dl = ImGui.GetWindowDrawList();
+            var a = vp.Pos;
+            var b = vp.Pos + vp.Size;
+            // Launcher background: jungle green top-right, warm glow bottom-left.
+            dl.AddRectFilledMultiColor(a, b,
+                U32(Night, 0.55f),
+                U32(Rgb(10, 58, 34), 0.5f),
+                U32(Night, 0.7f),
+                U32(Rgb(70, 30, 6), 0.55f));
+            Stripes(dl, a, b, 0.025f, 22f * ui, 7f * ui);
+        }
+        ImGui.End();
+        ImGui.PopStyleColor();
+        ImGui.PopStyleVar(2);
+    }
+
+    /// <summary>Header glow and diagonal stripes on the current card. Call right after Begin.</summary>
+    public static void CardDecor(float ui)
+    {
+        if (!Enabled) return;
+        var dl = ImGui.GetWindowDrawList();
+        var a = ImGui.GetWindowPos();
+        var b = a + ImGui.GetWindowSize();
+        float r = ImGui.GetStyle().WindowRounding;
+        const float inset = 1.5f; // keep the Wumpa border visible
+        float band = Math.Min(72f * ui, b.Y - a.Y);
+        // Follow the card opacity so a see-through Dev Menu stays see-through.
+        var glow = A(CardTop, Math.Min(0.95f, ImGui.GetStyle().Colors[(int)ImGuiCol.WindowBg].W));
+        dl.AddRectFilled(a + new Vector2(inset), new Vector2(b.X - inset, a.Y + r),
+            U32(glow), Math.Max(0f, r - inset), ImDrawFlags.RoundCornersTop);
+        dl.AddRectFilledMultiColor(new Vector2(a.X + inset, a.Y + r), new Vector2(b.X - inset, a.Y + band),
+            U32(glow), U32(glow), U32(glow with { W = 0f }), U32(glow with { W = 0f }));
+        Stripes(dl, a + new Vector2(r * 0.5f), b - new Vector2(r * 0.5f), 0.022f, 18f * ui, 5f * ui);
+    }
+
+    static void Stripes(ImDrawListPtr dl, Vector2 a, Vector2 b, float alpha, float step, float thick)
+    {
+        uint col = U32(Sand, alpha);
+        float h = b.Y - a.Y;
+        dl.PushClipRect(a, b, true);
+        for (float x = a.X - h; x < b.X; x += step)
+            dl.AddLine(new Vector2(x, b.Y), new Vector2(x + h, a.Y), col, thick);
+        dl.PopClipRect();
+    }
+
+    /// <summary>
+    /// Red kicker, big outlined Wumpa title and accent bar (old style: gray caption +
+    /// separator). True when the optional close button was clicked.
+    /// </summary>
+    public static bool Header(string kicker, string title, float ui, bool closeButton = false, float titlePx = 30f)
+    {
+        if (!Enabled)
+        {
+            ImGuiEx.TextDisabled(title.ToUpperInvariant());
+            ImGui.Separator();
+            ImGui.Spacing();
+            return false;
+        }
+
+        var dl = ImGui.GetWindowDrawList();
+        var start = ImGui.GetCursorScreenPos();
+        float w = ImGui.GetContentRegionAvail().X;
+        float s = titlePx / 30f;
+        float bs = 26f * Math.Max(0.8f, s) * ui;
+        float y = start.Y;
+
+        if (kicker.Length > 0)
+        {
+            float k = Math.Max(10f, 12f * s) * ui;
+            ShadowText(dl, Display(k), k, new Vector2(start.X, y), MarkRed, kicker.ToUpperInvariant(), ui);
+            y += k + 2f * ui;
+        }
+
+        // Shrink long titles ("WARP TO LEVEL") to the card width.
+        string text = title.ToUpperInvariant();
+        float size = titlePx * ui;
+        float room = w - (closeButton ? bs + 6f * ui : 0f);
+        float tw = Display(size).CalcTextSizeA(size, float.MaxValue, 0f, text).X;
+        if (tw > room && tw > 0f) size *= room / tw;
+        OutlinedTitle(dl, Display(size), size, new Vector2(start.X, y), text, ui);
+        y += size + 5f * ui;
+
+        dl.AddRectFilled(new Vector2(start.X, y), new Vector2(start.X + 40f * ui, y + 3f * ui), U32(Wumpa), 1.5f * ui);
+        dl.AddRectFilledMultiColor(
+            new Vector2(start.X + 46f * ui, y + 1f * ui), new Vector2(start.X + w, y + 2f * ui),
+            U32(Wumpa, 0.45f), U32(Wumpa, 0f), U32(Wumpa, 0f), U32(Wumpa, 0.45f));
+        y += 9f * ui;
+        ImGui.Dummy(new Vector2(w, y - start.Y));
+        if (!closeButton) return false;
+
+        var after = ImGui.GetCursorScreenPos();
+        ImGui.SetCursorScreenPos(new Vector2(start.X + w - bs, start.Y));
+        bool close = ImGui.InvisibleButton("##crash-close", new Vector2(bs, bs));
+        bool hot = ImGui.IsItemHovered();
+        var c = ImGui.GetItemRectMin() + new Vector2(bs * 0.5f);
+        dl.AddCircleFilled(c, bs * 0.5f, hot ? U32(Wumpa, 0.4f) : U32(Sand, 0.07f));
+        float d = bs * 0.2f;
+        uint xc = U32(hot ? WumpaHot : Sand);
+        dl.AddLine(c - new Vector2(d, d), c + new Vector2(d, d), xc, 2.5f * ui);
+        dl.AddLine(c + new Vector2(-d, d), c + new Vector2(d, -d), xc, 2.5f * ui);
+        ImGui.SetCursorScreenPos(after);
+        return close;
+    }
+
+    /// <summary>
+    /// Launcher menu row: Bungee label, Wumpa cursor and slide-in when hot. Old style:
+    /// gray selectable with a yellow ">" gutter. <paramref name="tag"/> = small right text.
+    /// </summary>
+    public static bool Row(string label, string id, float ui, bool enabled = true, string? tag = null, float px = 20f)
+    {
+        if (!Enabled) return ClassicRow(tag == null ? label : $"{label} ({tag})", id, enabled);
+
+        float size = px * ui;
+        float h = size * 1.5f;
+        float w = Math.Max(1f, ImGui.GetContentRegionAvail().X);
+        if (!enabled) ImGui.BeginDisabled();
+        bool clicked = ImGui.InvisibleButton("##row-" + id, new Vector2(w, h));
+        bool hot = enabled && (ImGui.IsItemHovered() || (ImGui.IsItemFocused() && ImGui.GetIO().NavVisible));
+        if (!enabled) ImGui.EndDisabled();
+
+        float t = Ease(id, hot);
+        var min = ImGui.GetItemRectMin();
+        var max = ImGui.GetItemRectMax();
+        var dl = ImGui.GetWindowDrawList();
+        if (t > 0.01f)
+        {
+            dl.AddRectFilledMultiColor(min, max,
+                U32(Wumpa, 0.24f * t), U32(Wumpa, 0f), U32(Wumpa, 0f), U32(Wumpa, 0.24f * t));
+            dl.AddRectFilled(min, new Vector2(min.X + 3f * ui, max.Y), U32(WumpaHot, t));
+            // Cursor gutter scales with the row font (pause 20 px, Dev Menu 15 px).
+            DrawWumpa(dl, new Vector2(min.X + size * 0.7f, (min.Y + max.Y) * 0.5f + ui),
+                size * 0.3f * (0.6f + 0.4f * t), t);
+        }
+
+        var color = enabled ? Vector4.Lerp(Sand, WumpaHot, t) : Disabled;
+        var pos = new Vector2(min.X + size * 1.45f + 6f * t * ui, min.Y + (h - size) * 0.5f);
+        ShadowText(dl, Display(size), size, pos, color, label.TrimEnd('.').ToUpperInvariant(), ui);
+
+        if (tag != null)
+        {
+            float ts = 13f * ui;
+            var tsz = BodyBold.CalcTextSizeA(ts, float.MaxValue, 0f, tag);
+            dl.AddText(BodyBold, ts, new Vector2(max.X - tsz.X - 8f * ui, min.Y + (h - tsz.Y) * 0.5f),
+                U32(enabled ? Muted : Disabled), tag);
+        }
+        return clicked && enabled;
+    }
+
+    static bool ClassicRow(string label, string id, bool enabled)
+    {
+        if (!enabled) ImGui.BeginDisabled();
+        bool clicked = ImGui.Selectable($"  {label}##{id}");
+        if (enabled && (ImGui.IsItemHovered() || ImGui.IsItemActive() || ImGui.IsItemFocused()))
+        {
+            var min = ImGui.GetItemRectMin();
+            float y = min.Y + (ImGui.GetItemRectSize().Y - ImGui.GetTextLineHeight()) * 0.5f;
+            ImGui.GetWindowDrawList().AddText(
+                new Vector2(min.X, y),
+                ImGui.ColorConvertFloat4ToU32(new Vector4(1f, 0.92f, 0.4f, 1f)),
+                ">");
+        }
+        if (!enabled) ImGui.EndDisabled();
+        return clicked && enabled;
+    }
+
+    /// <summary>Fading Wumpa rule between blocks (old style: separator).</summary>
+    public static void Divider(float ui)
+    {
+        if (!Enabled)
+        {
+            ImGui.Spacing();
+            ImGui.Separator();
+            ImGui.Spacing();
+            return;
+        }
+        ImGui.Dummy(new Vector2(0f, 2f * ui));
+        var p = ImGui.GetCursorScreenPos();
+        float w = ImGui.GetContentRegionAvail().X;
+        ImGui.GetWindowDrawList().AddRectFilledMultiColor(p, p + new Vector2(w, Math.Max(1f, ui)),
+            U32(Wumpa, 0.5f), U32(Wumpa, 0f), U32(Wumpa, 0f), U32(Wumpa, 0.5f));
+        ImGui.Dummy(new Vector2(w, 6f * ui));
+    }
+
+    /// <summary>Small bold caption above a widget.</summary>
+    public static void Caption(string text)
+    {
+        bool font = _bodyBold.HasValue;
+        if (font) ImGui.PushFont(_bodyBold!.Value);
+        ImGui.PushStyleColor(ImGuiCol.Text, Muted);
+        ImGui.TextUnformatted(text.ToUpperInvariant());
+        ImGui.PopStyleColor();
+        if (font) ImGui.PopFont();
+    }
+
+    /// <summary>Key chips ("[Esc] Resume"), wrapped to the card width. Old style: one gray line.</summary>
+    public static void Hints(float ui, params (string Key, string Action)[] items)
+    {
+        if (!Enabled)
+        {
+            ImGui.PushTextWrapPos(0f);
+            ImGuiEx.TextDisabled(string.Join(" · ", items.Select(i => $"{i.Key} {i.Action.ToLowerInvariant()}")));
+            ImGui.PopTextWrapPos();
+            return;
+        }
+
+        var dl = ImGui.GetWindowDrawList();
+        float size = 12f * ui;
+        float padX = 6f * ui, gap = 5f * ui, spacing = 12f * ui;
+        float chipH = size + 5f * ui;
+        float avail = ImGui.GetContentRegionAvail().X;
+        var origin = ImGui.GetCursorScreenPos();
+        float x = 0f, y = 0f;
+        foreach (var (key, action) in items)
+        {
+            var kSz = BodyBold.CalcTextSizeA(size, float.MaxValue, 0f, key);
+            var aSz = Body.CalcTextSizeA(size, float.MaxValue, 0f, action);
+            float chipW = kSz.X + padX * 2f;
+            float w = chipW + gap + aSz.X;
+            if (x > 0f && x + w > avail)
+            {
+                x = 0f;
+                y += chipH + 4f * ui;
+            }
+            var p = origin + new Vector2(x, y);
+            dl.AddRectFilled(p, p + new Vector2(chipW, chipH), U32(Wumpa, 0.85f), 4f * ui);
+            dl.AddText(BodyBold, size, p + new Vector2(padX, (chipH - kSz.Y) * 0.5f), U32(Night), key);
+            dl.AddText(Body, size, p + new Vector2(chipW + gap, (chipH - aSz.Y) * 0.5f), U32(Muted), action);
+            x += w + spacing;
+        }
+        ImGui.Dummy(new Vector2(avail, y + chipH));
+    }
+
+    static void ShadowText(ImDrawListPtr dl, ImFontPtr font, float size, Vector2 pos, Vector4 color, string text, float ui)
+    {
+        dl.AddText(font, size, pos + new Vector2(0f, 2f * ui), U32(Vector4.Zero with { W = 0.7f * color.W }), text);
+        dl.AddText(font, size, pos, U32(color), text);
+    }
+
+    /// <summary>Launcher logo treatment: crate-brown outline, drop shadow, yellow-to-orange fill.</summary>
+    static void OutlinedTitle(ImDrawListPtr dl, ImFontPtr font, float size, Vector2 pos, string text, float ui)
+    {
+        float o = Math.Max(1.5f, 2f * ui);
+        dl.AddText(font, size, pos + new Vector2(0f, o + 3f * ui), U32(Vector4.Zero with { W = 0.55f }), text);
+        uint outline = U32(CrateCore);
+        for (int i = 0; i < 8; i++)
+        {
+            float a = i * MathF.PI / 4f;
+            dl.AddText(font, size, pos + new Vector2(MathF.Cos(a), MathF.Sin(a)) * o, outline, text);
+        }
+        // One fill pass, then recolor its vertices top→bottom. (Two clipped halves left a
+        // 1 px seam on fractional y where the dark outline showed through.)
+        unsafe
+        {
+            int first = dl.NativePtr->VtxBuffer.Size;
+            dl.AddText(font, size, pos, 0xFFFFFFFFu, text);
+            var verts = (ImDrawVert*)dl.NativePtr->VtxBuffer.Data;
+            int end = dl.NativePtr->VtxBuffer.Size;
+            var top = Rgb(255, 196, 48);
+            float y0 = pos.Y + size * 0.2f, span = size * 0.6f;
+            for (int i = first; i < end; i++)
+            {
+                float t = Math.Clamp((verts[i].pos.Y - y0) / span, 0f, 1f);
+                verts[i].col = U32(Vector4.Lerp(top, Wumpa, t));
+            }
+        }
+    }
+
+    /// <summary>Tiny Wumpa fruit used as the menu cursor.</summary>
+    static void DrawWumpa(ImDrawListPtr dl, Vector2 c, float r, float alpha)
+    {
+        dl.AddQuadFilled(
+            c + new Vector2(0.05f * r, -0.8f * r),
+            c + new Vector2(0.5f * r, -1.55f * r),
+            c + new Vector2(1.15f * r, -1.35f * r),
+            c + new Vector2(0.55f * r, -0.75f * r),
+            U32(Leaf, alpha));
+        dl.AddCircleFilled(c, r, U32(Rgb(196, 84, 0), alpha));
+        dl.AddCircleFilled(c - new Vector2(0.12f * r), r * 0.84f, U32(Wumpa, alpha));
+        dl.AddCircleFilled(c - new Vector2(0.38f * r), r * 0.26f, U32(Rgb(255, 226, 150), alpha));
+    }
+
+    static float Ease(string id, bool hot)
+    {
+        _hot.TryGetValue(id, out float t);
+        float step = Math.Min(ImGui.GetIO().DeltaTime, 0.1f) * 12f;
+        t = hot ? Math.Min(1f, t + step) : Math.Max(0f, t - step);
+        _hot[id] = t;
+        return t;
+    }
+
+    static Vector4 Rgb(int r, int g, int b, float a = 1f) => new(r / 255f, g / 255f, b / 255f, a);
+    static Vector4 A(Vector4 c, float alpha) => c with { W = alpha };
+    static uint U32(Vector4 c) => ImGui.ColorConvertFloat4ToU32(c);
+    static uint U32(Vector4 c, float alpha) => ImGui.ColorConvertFloat4ToU32(c with { W = alpha });
+}

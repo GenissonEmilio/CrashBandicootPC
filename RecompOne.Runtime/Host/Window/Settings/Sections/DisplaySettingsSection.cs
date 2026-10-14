@@ -155,6 +155,18 @@ internal sealed class DisplaySettingsSection : ISettingsSection
         ImGui.TextDisabled("Reduces polygon wobble (GTE subpixel)");
 
         ImGui.TextDisabled("Filters off on menus & cutscenes; dedither applies everywhere");
+
+        ImGui.Spacing();
+        ImGui.Separator();
+        ImGui.Spacing();
+
+        bool crashMenus = ConfigManager.View.CrashMenuStyle;
+        if (ImGui.Checkbox("Crash menu style", ref crashMenus))
+        {
+            ConfigManager.View.CrashMenuStyle = crashMenus;
+            ConfigManager.SaveView(PanelManager.Panels);
+        }
+        ImGui.TextDisabled("Launcher look for pause, Dev Menu and Settings; off = plain gray");
     }
 
     static int IndexOfScale(int scale)
