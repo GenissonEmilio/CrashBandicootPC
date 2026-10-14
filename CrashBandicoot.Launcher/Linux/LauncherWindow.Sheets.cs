@@ -32,8 +32,13 @@ sealed partial class LauncherWindow
         ["other"] = "Launcher error",
     };
 
+    static readonly string[] SettingsTabNames = ["Display", "Graphics", "Audio", "Gameplay"];
+
     /// <summary>Whether the Samples &amp; stubs group is expanded in the Mods sheet.</summary>
     bool _modsStubExpanded;
+
+    /// <summary>Settings tab shown when the sheet opens again (kept while the launcher runs).</summary>
+    int _settingsTab;
 
     // ── Building blocks ───────────────────────────────────────────────
 
@@ -105,13 +110,20 @@ sealed partial class LauncherWindow
         },
     };
 
-    /// <summary>Title on top, buttons at the bottom, scrollable body in between.</summary>
-    static Border SheetLayout(double width, string title, Control body, Control buttons, bool scroll)
+    /// <summary>Title on top (then <paramref name="header"/>, not scrolled), buttons at the bottom, body in between.</summary>
+    static Border SheetLayout(double width, string title, Control body, Control buttons, bool scroll,
+        Control? header = null)
     {
         var dock = new DockPanel { LastChildFill = true };
         var titleBlock = SheetTitle(title);
         DockPanel.SetDock(titleBlock, Dock.Top);
         dock.Children.Add(titleBlock);
+        if (header != null)
+        {
+            header.Margin = new Thickness(36, 0, 36, 16);
+            DockPanel.SetDock(header, Dock.Top);
+            dock.Children.Add(header);
+        }
         var footer = WithMargin(buttons, new Thickness(36, 14, 36, 24));
         DockPanel.SetDock(footer, Dock.Bottom);
         dock.Children.Add(footer);
@@ -250,8 +262,9 @@ sealed partial class LauncherWindow
             return c;
         }
 
-        var vol = Nav(new ThemeSlider { Value = (int)Math.Round(game.MasterVolume * 100) });
-        var muted = Nav(new ThemeCheck("Muted") { Checked = game.Muted });
+        // Tabs first in the focus order; hidden pages are skipped by MoveSheetFocus.
+        var tabs = Nav(new SheetTabs(SettingsTabNames, _settingsTab));
+
         var fullscreen = Nav(new ThemeCheck("Fullscreen") { Checked = view.Fullscreen });
         var widescreen = Nav(new ThemeCheck("Native widescreen (16:9)") { Checked = view.Widescreen });
         var frameRate = Nav(MakeCombo(
@@ -259,6 +272,7 @@ sealed partial class LauncherWindow
             view.FrameRate));
         var internalRes = Nav(MakeCombo([(1, "Native (1x)"), (2, "2x"), (4, "4x"), (8, "8x (4K)")],
             view.InternalResolution));
+
         var texFilter = Nav(MakeCombo([(0, "Off"), (1, "Bilinear"), (2, "Sharp bilinear"), (3, "Soft smooth")],
             view.TextureFilter));
         var strength = Nav(new ThemeSlider { Value = (int)Math.Round(view.TextureFilterStrength * 100) });
@@ -266,6 +280,10 @@ sealed partial class LauncherWindow
         var dejitter = Nav(new ThemeCheck("Dejitter") { Checked = view.Dejitter });
         var scaledDither = Nav(new ThemeCheck("Scaled dither") { Checked = view.ScaledDither });
         var crtFilter = Nav(new ThemeCheck("CRT filter (MattiasCRT)") { Checked = view.CrtFilter });
+
+        var vol = Nav(new ThemeSlider { Value = (int)Math.Round(game.MasterVolume * 100) });
+        var muted = Nav(new ThemeCheck("Muted") { Checked = game.Muted });
+
         var saveLives = Nav(new ThemeCheck("Save lives to memory card") { Checked = view.SaveLives });
         var analogMovement = Nav(new ThemeCheck("Analog movement (left stick)") { Checked = view.AnalogMovement });
         var boxCounter = Nav(new ThemeCheck("Box counter") { Checked = view.BoxCounter });
@@ -275,36 +293,75 @@ sealed partial class LauncherWindow
         texFilter.SelectionChanged += (_, _) => SyncStrength();
         SyncStrength();
 
-        var body = new StackPanel
-        {
-            Children =
+        // One page per tab; Save writes every page, not only the visible one.
+        StackPanel[] pages =
+        [
+            new()
             {
-                Row(Label("Master volume", 202), vol, 30),
-                WithMargin(muted, new Thickness(0, 0, 0, 22)),
-                WithMargin(fullscreen, new Thickness(0, 0, 0, 22)),
-                WithMargin(widescreen, new Thickness(0, 0, 0, 14)),
-                Hint("Native 16:9 gameplay with a wider view. Crates and other objects stay visible in the extra view. Menus, map, and cutscenes stay 4:3."),
-                Row(Label("Frame rate", 202), frameRate, 14),
-                Hint("Gameplay and bonus. Same speed as 30 FPS, unique frames at the chosen rate. Menus, crate tally, and bonus save stay 30. In-game keys 1–5 switch modes unless turned off in Controls."),
-                Row(Label("Internal resolution", 202), internalRes, 14),
-                Hint("Applies on next game start. Use 8x on 4K monitors."),
-                Row(Label("Texture filter", 202), texFilter, 30),
-                strengthRow,
-                WithMargin(dedither, new Thickness(0, 0, 0, 22)),
-                WithMargin(dejitter, new Thickness(0, 0, 0, 14)),
-                Hint("Texture filters auto-off on menus & cutscenes. Dedither and dejitter apply everywhere."),
-                WithMargin(scaledDither, new Thickness(0, 0, 0, 14)),
-                Hint("Dither dots keep the PS1 pixel size at any internal resolution, like the original. Off: finer dots above 1x. No effect with Dedither."),
-                WithMargin(crtFilter, new Thickness(0, 0, 0, 14)),
-                Hint("Curved CRT TV look by Mattias Gustavsson: scanlines, glow, and a shadow mask."),
-                WithMargin(saveLives, new Thickness(0, 0, 0, 14)),
-                Hint("Load Game restores the lives you had when you saved, like Crash 2 and 3. Off: every load starts with 4 lives, as in the original."),
-                WithMargin(analogMovement, new Thickness(0, 0, 0, 14)),
-                Hint("The gamepad left stick steers Crash in any direction, not only the 8 of the D-pad. D-pad and keyboard are unchanged."),
-                WithMargin(boxCounter, new Thickness(0, 0, 0, 14)),
-                Hint("Shows boxes broken / boxes needed for the gem in the corner during levels. Turns gray when a death loses the gem: Crash 1 forgets the boxes broken before the last checkpoint.", 8),
+                Children =
+                {
+                    WithMargin(fullscreen, new Thickness(0, 0, 0, 22)),
+                    WithMargin(widescreen, new Thickness(0, 0, 0, 14)),
+                    Hint("Native 16:9 gameplay with a wider view. Crates and other objects stay visible in the extra view. Menus, map, and cutscenes stay 4:3."),
+                    Row(Label("Frame rate", 202), frameRate, 14),
+                    Hint("Gameplay and bonus. Same speed as 30 FPS, unique frames at the chosen rate. Menus, crate tally, and bonus save stay 30. In-game keys 1–5 switch modes unless turned off in Controls."),
+                    Row(Label("Internal resolution", 202), internalRes, 14),
+                    Hint("Applies on next game start. Use 8x on 4K monitors.", 8),
+                },
             },
-        };
+            new()
+            {
+                Children =
+                {
+                    Row(Label("Texture filter", 202), texFilter, 30),
+                    strengthRow,
+                    new StackPanel
+                    {
+                        Orientation = Orientation.Horizontal,
+                        Margin = new Thickness(0, 0, 0, 14),
+                        Children = { new Border { Width = 202, Child = dedither }, dejitter },
+                    },
+                    Hint("Texture filters auto-off on menus & cutscenes. Dedither and dejitter apply everywhere."),
+                    WithMargin(scaledDither, new Thickness(0, 0, 0, 14)),
+                    Hint("Dither dots keep the PS1 pixel size at any internal resolution, like the original. Off: finer dots above 1x. No effect with Dedither."),
+                    WithMargin(crtFilter, new Thickness(0, 0, 0, 14)),
+                    Hint("Curved CRT TV look by Mattias Gustavsson: scanlines, glow, and a shadow mask.", 8),
+                },
+            },
+            new()
+            {
+                Children =
+                {
+                    Row(Label("Master volume", 202), vol, 30),
+                    WithMargin(muted, new Thickness(0, 0, 0, 8)),
+                },
+            },
+            new()
+            {
+                Children =
+                {
+                    WithMargin(saveLives, new Thickness(0, 0, 0, 14)),
+                    Hint("Load Game restores the lives you had when you saved, like Crash 2 and 3. Off: every load starts with 4 lives, as in the original."),
+                    WithMargin(analogMovement, new Thickness(0, 0, 0, 14)),
+                    Hint("The gamepad left stick steers Crash in any direction, not only the 8 of the D-pad. D-pad and keyboard are unchanged."),
+                    WithMargin(boxCounter, new Thickness(0, 0, 0, 14)),
+                    Hint("Shows boxes broken / boxes needed for the gem in the corner during levels. Turns gray when a death loses the gem: Crash 1 forgets the boxes broken before the last checkpoint.", 8),
+                },
+            },
+        ];
+        var body = new Panel();
+        foreach (var page in pages)
+            body.Children.Add(page);
+
+        void ShowTab(int index)
+        {
+            for (var i = 0; i < pages.Length; i++)
+                pages[i].IsVisible = i == index;
+            _settingsTab = index;
+            (body.Parent as ScrollViewer)?.ScrollToHome();
+        }
+        tabs.SelectedIndexChanged += (_, _) => ShowTab(tabs.SelectedIndex);
+        ShowTab(tabs.SelectedIndex);
 
         var save = Nav(new ThemeButton("Save", primary: true));
         save.Click += (_, _) =>
@@ -331,7 +388,7 @@ sealed partial class LauncherWindow
         var back = Nav(new ThemeButton("Back", primary: false));
         back.Click += (_, _) => CloseSheet();
 
-        var card = SheetLayout(644, "Settings", body, ButtonRow(save, back), scroll: true);
+        var card = SheetLayout(644, "Settings", body, ButtonRow(save, back), scroll: true, header: tabs);
         card.VerticalAlignment = VerticalAlignment.Stretch;
         card.Margin = new Thickness(0, 16);
         OpenSheet(card, nav);

@@ -18,8 +18,8 @@ internal unsafe sealed class LauncherGamepad : IDisposable
     bool _ownSubsystem;
     bool _disposed;
 
-    bool _up, _down, _left, _right, _confirm, _cancel;
-    bool _prevUp, _prevDown, _prevLeft, _prevRight, _prevConfirm, _prevCancel;
+    bool _up, _down, _left, _right, _confirm, _cancel, _tabLeft, _tabRight;
+    bool _prevUp, _prevDown, _prevLeft, _prevRight, _prevConfirm, _prevCancel, _prevTabLeft, _prevTabRight;
     int _repeatDir; // 1=up 2=down 3=left 4=right
     int _repeatTicks;
     int _rescanCooldown;
@@ -98,6 +98,8 @@ internal unsafe sealed class LauncherGamepad : IDisposable
 
         if (Edge(ref _prevConfirm, _confirm)) action |= LauncherPadAction.Confirm;
         if (Edge(ref _prevCancel, _cancel)) action |= LauncherPadAction.Cancel;
+        if (Edge(ref _prevTabLeft, _tabLeft)) action |= LauncherPadAction.PrevTab;
+        if (Edge(ref _prevTabRight, _tabRight)) action |= LauncherPadAction.NextTab;
 
         action |= DirWithRepeat(1, ref _prevUp, _up);
         action |= DirWithRepeat(2, ref _prevDown, _down);
@@ -161,6 +163,9 @@ internal unsafe sealed class LauncherGamepad : IDisposable
         // A / Cross = confirm, B / Circle = cancel (SDL south/east face buttons).
         _confirm = Button(GameControllerButton.A) || Button(GameControllerButton.Start);
         _cancel = Button(GameControllerButton.B) || Button(GameControllerButton.Back);
+        // L1 / R1 switch sheet tabs (Settings).
+        _tabLeft = Button(GameControllerButton.Leftshoulder);
+        _tabRight = Button(GameControllerButton.Rightshoulder);
     }
 
     bool Button(GameControllerButton b) =>
@@ -201,6 +206,7 @@ internal unsafe sealed class LauncherGamepad : IDisposable
         }
         ClearHeld();
         _prevUp = _prevDown = _prevLeft = _prevRight = _prevConfirm = _prevCancel = false;
+        _prevTabLeft = _prevTabRight = false;
     }
 
     void ClosePad()
@@ -215,7 +221,7 @@ internal unsafe sealed class LauncherGamepad : IDisposable
         _repeatTicks = 0;
     }
 
-    void ClearHeld() => _up = _down = _left = _right = _confirm = _cancel = false;
+    void ClearHeld() => _up = _down = _left = _right = _confirm = _cancel = _tabLeft = _tabRight = false;
 }
 
 [Flags]
@@ -228,4 +234,6 @@ internal enum LauncherPadAction
     Right = 8,
     Confirm = 16,
     Cancel = 32,
+    PrevTab = 64,
+    NextTab = 128,
 }

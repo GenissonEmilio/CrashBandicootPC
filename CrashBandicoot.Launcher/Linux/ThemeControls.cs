@@ -396,6 +396,116 @@ sealed class ThemeButton : ThemeControl, INavItem
     }
 }
 
+/// <summary>
+/// Row of tabs on top of a sheet (Settings), like the Windows SheetTabStrip: selected tab
+/// orange like Save, others dark like Back. Left/Right when focused, L1/R1 or Ctrl+Tab switch tabs.
+/// </summary>
+sealed class SheetTabs : ThemeControl, INavItem
+{
+    const double Gap = 8;
+    readonly string[] _tabs;
+    int _selected;
+    int _hover = -1;
+
+    public SheetTabs(string[] tabs, int selected)
+    {
+        _tabs = tabs;
+        _selected = Math.Clamp(selected, 0, tabs.Length - 1);
+        Height = 40;
+    }
+
+    public event EventHandler? SelectedIndexChanged;
+
+    public int SelectedIndex
+    {
+        get => _selected;
+        set
+        {
+            var v = Math.Clamp(value, 0, _tabs.Length - 1);
+            if (v == _selected) return;
+            _selected = v;
+            InvalidateVisual();
+            SelectedIndexChanged?.Invoke(this, EventArgs.Empty);
+        }
+    }
+
+    /// <summary>Previous/next tab, wrapping around.</summary>
+    public void Step(int direction) =>
+        SelectedIndex = (_selected + direction + _tabs.Length) % _tabs.Length;
+
+    /// <summary>Confirm enters the page; the window handles it (see ActivateSheetFocused).</summary>
+    public void Activate() { }
+
+    public bool Nudge(int direction)
+    {
+        Step(direction);
+        return true;
+    }
+
+    Rect TabRect(int i)
+    {
+        var w = (Bounds.Width - Gap * (_tabs.Length - 1)) / _tabs.Length;
+        return new Rect(i * (w + Gap), 0, Math.Max(1, w), Bounds.Height);
+    }
+
+    int HitTest(Point p)
+    {
+        for (var i = 0; i < _tabs.Length; i++)
+            if (TabRect(i).Contains(p)) return i;
+        return -1;
+    }
+
+    protected override void OnPointerPressed(PointerPressedEventArgs e)
+    {
+        base.OnPointerPressed(e);
+        if (!IsLeftPress(e, this)) return;
+        var hit = HitTest(e.GetPosition(this));
+        if (hit < 0) return;
+        e.Handled = true;
+        Focus(NavigationMethod.Pointer);
+        SelectedIndex = hit;
+    }
+
+    protected override void OnPointerMoved(PointerEventArgs e)
+    {
+        base.OnPointerMoved(e);
+        var hit = HitTest(e.GetPosition(this));
+        if (hit == _hover) return;
+        _hover = hit;
+        InvalidateVisual();
+    }
+
+    protected override void OnPointerExited(PointerEventArgs e)
+    {
+        base.OnPointerExited(e);
+        _hover = -1;
+        InvalidateVisual();
+    }
+
+    public override void Render(DrawingContext g)
+    {
+        g.FillRectangle(Brushes.Transparent, new Rect(Bounds.Size));
+        for (var i = 0; i < _tabs.Length; i++)
+        {
+            var r = TabRect(i);
+            var selected = i == _selected;
+            var back = selected
+                ? (i == _hover ? WumpaHot : Wumpa)
+                : (i == _hover ? Color.FromRgb(48, 32, 20) : Color.FromRgb(28, 18, 12));
+            g.FillRectangle(Brush(back), r);
+
+            if (selected && IsFocused)
+                g.DrawRectangle(null, new Pen(Brush(Sand), 2), r.Deflate(1));
+            else
+                g.DrawRectangle(null, new Pen(selected ? Brush(220, 255, 180, 60) : Brush(140, 255, 200, 120)), r.Deflate(0.5));
+
+            var fg = selected ? Brush(Color.FromRgb(42, 18, 0)) : Brush(Sand);
+            var ft = Text(_tabs[i].ToUpperInvariant(), BungeeFace, 16, fg);
+            g.DrawText(ft, new Point(r.X + (r.Width - ft.Width) / 2, (r.Height - ft.Height) / 2));
+        }
+    }
+}
+
 /// <summary>Collapsible category header in the Mods sheet.</summary>
 sealed class ModGroupHeader : ThemeControl, INavItem
 {

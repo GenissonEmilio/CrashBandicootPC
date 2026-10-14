@@ -24,6 +24,8 @@ public sealed class NativeLauncherUi : UserControl, ILauncherUi
         ("Cheat menu", "cheatMenu"),
     ];
 
+    static readonly string[] SettingsTabNames = ["Display", "Graphics", "Audio", "Gameplay"];
+
     static readonly Dictionary<string, string> FocusLabels = new(StringComparer.OrdinalIgnoreCase)
     {
         ["cue"] = "Problem with the .cue",
@@ -82,6 +84,8 @@ public sealed class NativeLauncherUi : UserControl, ILauncherUi
     bool _sheetFill;
     /// <summary>Whether the Samples & stubs group is expanded in the Mods sheet.</summary>
     bool _modsStubExpanded;
+    /// <summary>Settings tab shown when the sheet opens again (kept while the launcher runs).</summary>
+    int _settingsTab;
 
     // Settings / controls / cheats / mods state buffers
     readonly Dictionary<string, KeyCaptureBox> _keyBoxes = new(StringComparer.Ordinal);
@@ -486,19 +490,24 @@ public sealed class NativeLauncherUi : UserControl, ILauncherUi
             return;
         }
 
-        var onSlider = IsSliderFocused();
+        if (action.HasFlag(LauncherPadAction.PrevTab))
+            StepSheetTab(-1);
+        if (action.HasFlag(LauncherPadAction.NextTab))
+            StepSheetTab(1);
+
+        var onNudge = IsNudgeFocused();
 
         if (action.HasFlag(LauncherPadAction.Up))
             CycleSheetFocus(forward: false);
         if (action.HasFlag(LauncherPadAction.Down))
             CycleSheetFocus(forward: true);
 
-        if (onSlider)
+        if (onNudge)
         {
             if (action.HasFlag(LauncherPadAction.Left))
-                NudgeFocusedSlider(increase: false);
+                NudgeFocused(increase: false);
             if (action.HasFlag(LauncherPadAction.Right))
-                NudgeFocusedSlider(increase: true);
+                NudgeFocused(increase: true);
         }
         else
         {
@@ -512,15 +521,28 @@ public sealed class NativeLauncherUi : UserControl, ILauncherUi
             ActivateSheetFocused();
     }
 
-    bool IsSliderFocused()
+    /// <summary>Focused control uses Left/Right itself (slider value, tab strip).</summary>
+    bool IsNudgeFocused()
     {
         var c = FindForm()?.ActiveControl;
         while (c != null)
         {
-            if (c is ThemeSlider) return true;
+            if (c is ThemeSlider or SheetTabStrip) return true;
             c = c.Parent;
         }
         return false;
+    }
+
+    /// <summary>Tab strip of the open sheet, if it has one (Settings).</summary>
+    SheetTabStrip? ActiveTabs => _activeSheet?.Controls.OfType<SheetTabStrip>().FirstOrDefault();
+
+    /// <summary>L1/R1 or Ctrl+Tab: previous/next tab. Focus goes to the strip so the hidden page drops it.</summary>
+    bool StepSheetTab(int direction)
+    {
+        if (ActiveTabs is not { } tabs) return false;
+        tabs.Focus();
+        tabs.Step(direction);
+        return true;
     }
 
     void CycleSheetFocus(bool forward)
@@ -534,15 +556,19 @@ public sealed class NativeLauncherUi : UserControl, ILauncherUi
             _activeSheet.SelectNextControl(null, forward, tabStopOnly: true, nested: true, wrap: true);
     }
 
-    void NudgeFocusedSlider(bool increase)
+    void NudgeFocused(bool increase)
     {
         var c = FindForm()?.ActiveControl;
         while (c != null)
         {
-            if (c is ThemeSlider slider)
+            switch (c)
             {
-                slider.Value += increase ? slider.Step : -slider.Step;
-                return;
+                case ThemeSlider slider:
+                    slider.Value += increase ? slider.Step : -slider.Step;
+                    return;
+                case SheetTabStrip tabs:
+                    tabs.Step(increase ? 1 : -1);
+                    return;
             }
             c = c.Parent;
         }
@@ -569,6 +595,10 @@ public sealed class NativeLauncherUi : UserControl, ILauncherUi
                     return;
                 case ComboBox combo:
                     combo.DroppedDown = !combo.DroppedDown;
+                    return;
+                case SheetTabStrip:
+                    // Confirm on the tabs enters the page.
+                    CycleSheetFocus(forward: true);
                     return;
             }
             c = c.Parent;
@@ -678,11 +708,16 @@ public sealed class NativeLauncherUi : UserControl, ILauncherUi
                 case Keys.Down:
                     CycleSheetFocus(forward: true);
                     return true;
-                case Keys.Left when IsSliderFocused():
-                    NudgeFocusedSlider(increase: false);
+                case Keys.Control | Keys.Tab:
+                case Keys.Control | Keys.Shift | Keys.Tab:
+                    if (StepSheetTab(keyData.HasFlag(Keys.Shift) ? -1 : 1))
+                        return true;
+                    break;
+                case Keys.Left when IsNudgeFocused():
+                    NudgeFocused(increase: false);
                     return true;
-                case Keys.Right when IsSliderFocused():
-                    NudgeFocusedSlider(increase: true);
+                case Keys.Right when IsNudgeFocused():
+                    NudgeFocused(increase: true);
                     return true;
                 case Keys.Left:
                     CycleSheetFocus(forward: false);
@@ -1366,14 +1401,24 @@ public sealed class NativeLauncherUi : UserControl, ILauncherUi
         var title = MakeTitle("Settings");
         card.Controls.Add(title);
 
-        var list = new DoubleBufferedPanel
+        // One scrollable page per tab. Save writes every page, not only the visible one.
+        var tabs = new SheetTabStrip(SettingsTabNames);
+        card.Controls.Add(tabs);
+        // Title behind the tabs in z-order (tab order is unchanged).
+        title.SendToBack();
+        var pages = new DoubleBufferedPanel[SettingsTabNames.Length];
+        for (var i = 0; i < pages.Length; i++)
         {
-            AutoScroll = true,
-            BackColor = Color.Transparent,
-        };
-        list.HorizontalScroll.Maximum = 0;
-        card.Controls.Add(list);
+            pages[i] = new DoubleBufferedPanel
+            {
+                AutoScroll = true,
+                BackColor = Color.Transparent,
+            };
+            pages[i].HorizontalScroll.Maximum = 0;
+            card.Controls.Add(pages[i]);
+        }
 
+        var page = pages[0];
         var y = 12;
         const int labelW = 200;
         const int controlX = 214;
@@ -1381,9 +1426,15 @@ public sealed class NativeLauncherUi : UserControl, ILauncherUi
         const int rowGap = 62;
         const int hintGap = 66;
 
+        void BeginPage(int index)
+        {
+            page = pages[index];
+            y = 12;
+        }
+
         void AddLabel(string t)
         {
-            list.Controls.Add(new Label
+            page.Controls.Add(new Label
             {
                 Text = t,
                 ForeColor = NativeTheme.Sand,
@@ -1396,7 +1447,7 @@ public sealed class NativeLauncherUi : UserControl, ILauncherUi
 
         void AddHint(string t)
         {
-            list.Controls.Add(new Label
+            page.Controls.Add(new Label
             {
                 Text = t,
                 ForeColor = Color.FromArgb(160, NativeTheme.Sand),
@@ -1408,32 +1459,16 @@ public sealed class NativeLauncherUi : UserControl, ILauncherUi
             y += hintGap;
         }
 
-        AddLabel("Master volume");
-        _vol = new ThemeSlider
-        {
-            Minimum = 0,
-            Maximum = 100,
-            Step = 5,
-            Value = 100,
-            Location = new Point(controlX, y + 2),
-            Size = new Size(340, 28),
-        };
-        list.Controls.Add(_vol);
-        y += rowGap;
-
-        _muted = MakeCheck("Muted");
-        _muted.Location = new Point(12, y);
-        list.Controls.Add(_muted);
-        y += checkGap;
-
+        // ── Display ──
+        BeginPage(0);
         _fullscreen = MakeCheck("Fullscreen");
         _fullscreen.Location = new Point(12, y);
-        list.Controls.Add(_fullscreen);
+        page.Controls.Add(_fullscreen);
         y += checkGap;
 
         _widescreen = MakeCheck("Native widescreen (16:9)");
         _widescreen.Location = new Point(12, y);
-        list.Controls.Add(_widescreen);
+        page.Controls.Add(_widescreen);
         y += 52;
         AddHint("Native 16:9 gameplay with a wider view. Crates and other objects stay visible in the extra view. Menus, map, and cutscenes stay 4:3.");
 
@@ -1441,7 +1476,7 @@ public sealed class NativeLauncherUi : UserControl, ILauncherUi
         _frameRate = MakeCombo(new Point(controlX, y), [
             (0, "Original (30 FPS)"), (60, "60 FPS"), (120, "120 FPS"), (240, "240 FPS"), (-1, "Uncapped"),
         ]);
-        list.Controls.Add(_frameRate);
+        page.Controls.Add(_frameRate);
         y += rowGap;
         AddHint("Gameplay and bonus. Same speed as 30 FPS, unique frames at the chosen rate. Menus, crate tally, and bonus save stay 30. In-game keys 1–5 switch modes unless turned off in Controls.");
 
@@ -1449,16 +1484,18 @@ public sealed class NativeLauncherUi : UserControl, ILauncherUi
         _internalRes = MakeCombo(new Point(controlX, y), [
             (1, "Native (1x)"), (2, "2x"), (4, "4x"), (8, "8x (4K)"),
         ]);
-        list.Controls.Add(_internalRes);
+        page.Controls.Add(_internalRes);
         y += rowGap;
         AddHint("Applies on next game start. Use 8x on 4K monitors.");
 
+        // ── Graphics ──
+        BeginPage(1);
         AddLabel("Texture filter");
         _texFilter = MakeCombo(new Point(controlX, y), [
             (0, "Off"), (1, "Bilinear"), (2, "Sharp bilinear"), (3, "Soft smooth"),
         ]);
         _texFilter.SelectedIndexChanged += (_, _) => SyncFilterStrengthRow();
-        list.Controls.Add(_texFilter);
+        page.Controls.Add(_texFilter);
         y += rowGap;
 
         _filterStrengthLabel = new Label
@@ -1470,7 +1507,7 @@ public sealed class NativeLauncherUi : UserControl, ILauncherUi
             Size = new Size(labelW, 28),
             BackColor = Color.Transparent,
         };
-        list.Controls.Add(_filterStrengthLabel);
+        page.Controls.Add(_filterStrengthLabel);
         _filterStrength = new ThemeSlider
         {
             Minimum = 0,
@@ -1480,52 +1517,74 @@ public sealed class NativeLauncherUi : UserControl, ILauncherUi
             Location = new Point(controlX, y + 2),
             Size = new Size(340, 28),
         };
-        list.Controls.Add(_filterStrength);
+        page.Controls.Add(_filterStrength);
         y += rowGap;
 
         _dedither = MakeCheck("Dedither");
         _dedither.Location = new Point(12, y);
-        list.Controls.Add(_dedither);
-        y += checkGap;
+        page.Controls.Add(_dedither);
         _dejitter = MakeCheck("Dejitter");
-        _dejitter.Location = new Point(12, y);
-        list.Controls.Add(_dejitter);
+        _dejitter.Location = new Point(controlX, y);
+        page.Controls.Add(_dejitter);
         y += 52;
         AddHint("Texture filters auto-off on menus & cutscenes. Dedither and dejitter apply everywhere.");
 
         _scaledDither = MakeCheck("Scaled dither");
         _scaledDither.Location = new Point(12, y);
         _scaledDither.Checked = true;
-        list.Controls.Add(_scaledDither);
+        page.Controls.Add(_scaledDither);
         y += 52;
         AddHint("Dither dots keep the PS1 pixel size at any internal resolution, like the original. Off: finer dots above 1x. No effect with Dedither.");
 
         _crtFilter = MakeCheck("CRT filter (MattiasCRT)");
         _crtFilter.Location = new Point(12, y);
-        list.Controls.Add(_crtFilter);
+        page.Controls.Add(_crtFilter);
         y += 52;
         AddHint("Curved CRT TV look by Mattias Gustavsson: scanlines, glow, and a shadow mask.");
 
+        // ── Audio ──
+        BeginPage(2);
+        AddLabel("Master volume");
+        _vol = new ThemeSlider
+        {
+            Minimum = 0,
+            Maximum = 100,
+            Step = 5,
+            Value = 100,
+            Location = new Point(controlX, y + 2),
+            Size = new Size(340, 28),
+        };
+        page.Controls.Add(_vol);
+        y += rowGap;
+
+        _muted = MakeCheck("Muted");
+        _muted.Location = new Point(12, y);
+        page.Controls.Add(_muted);
+
+        // ── Gameplay ──
+        BeginPage(3);
         _saveLives = MakeCheck("Save lives to memory card");
         _saveLives.Location = new Point(12, y);
         _saveLives.Checked = true;
-        list.Controls.Add(_saveLives);
+        page.Controls.Add(_saveLives);
         y += 52;
         AddHint("Load Game restores the lives you had when you saved, like Crash 2 and 3. Off: every load starts with 4 lives, as in the original.");
 
         _analogMovement = MakeCheck("Analog movement (left stick)");
         _analogMovement.Location = new Point(12, y);
-        list.Controls.Add(_analogMovement);
+        page.Controls.Add(_analogMovement);
         y += 52;
         AddHint("The gamepad left stick steers Crash in any direction, not only the 8 of the D-pad. D-pad and keyboard are unchanged.");
 
         _boxCounter = MakeCheck("Box counter");
         _boxCounter.Location = new Point(12, y);
-        list.Controls.Add(_boxCounter);
+        page.Controls.Add(_boxCounter);
         y += 52;
         AddHint("Shows boxes broken / boxes needed for the gem in the corner during levels. Turns gray when a death loses the gem: Crash 1 forgets the boxes broken before the last checkpoint.");
 
-        list.AutoScrollMinSize = new Size(0, y + 18);
+        // Scroll extent = last control + a small margin (no empty hint gap at the end).
+        foreach (var p in pages)
+            p.AutoScrollMinSize = new Size(0, p.Controls.Cast<Control>().Max(c => c.Bottom) + 12);
 
         var save = MakePrimaryBtn("Save");
         save.Click += (_, _) =>
@@ -1556,6 +1615,13 @@ public sealed class NativeLauncherUi : UserControl, ILauncherUi
         card.Controls.Add(save);
         card.Controls.Add(back);
 
+        void ShowTab(int index)
+        {
+            for (var i = 0; i < pages.Length; i++)
+                pages[i].Visible = i == index;
+            _settingsTab = index;
+        }
+
         void LayoutSettingsSheet()
         {
             const int popupPad = 16;
@@ -1573,16 +1639,30 @@ public sealed class NativeLauncherUi : UserControl, ILauncherUi
             }
 
             title.Location = new Point(marginX, 22);
-            var listTop = 84;
-            list.Location = new Point(16, listTop);
-            list.Size = new Size(
-                Math.Max(280, card.ClientSize.Width - 32),
-                Math.Max(140, card.ClientSize.Height - listTop - footerH - 4));
+            // Bungee's tall line box makes the AutoSize label end well below the glyphs:
+            // start the tabs under the label, never inside it.
+            tabs.Location = new Point(28, Math.Max(80, title.Bottom + 4));
+            tabs.Size = new Size(Math.Max(280, card.ClientSize.Width - 56), 40);
+            var listTop = tabs.Bottom + 12;
+            foreach (var p in pages)
+            {
+                p.Location = new Point(16, listTop);
+                p.Size = new Size(
+                    Math.Max(280, card.ClientSize.Width - 32),
+                    Math.Max(140, card.ClientSize.Height - listTop - footerH - 4));
+            }
             var by = card.ClientSize.Height - footerH + 10;
             save.Location = new Point(marginX, by);
             back.Location = new Point(marginX + 174, by);
         }
 
+        // Pick the page and size the card before it is shown: building all pages
+        // visible and hiding/resizing afterwards flashed black/white boxes on open.
+        // Hidden pages create their controls the first time their tab is shown.
+        tabs.SelectedIndex = _settingsTab;
+        tabs.SelectedIndexChanged += (_, _) => ShowTab(tabs.SelectedIndex);
+        ShowTab(tabs.SelectedIndex);
+        LayoutSettingsSheet();
         card.Resize += (_, _) => LayoutSettingsSheet();
         OpenSheet(card);
         LayoutSettingsSheet();
@@ -2560,6 +2640,172 @@ public sealed class NativeLauncherUi : UserControl, ILauncherUi
             path.AddArc(r.X, r.Bottom - d, d, d, 90, 90);
             path.CloseFigure();
             return path;
+        }
+    }
+
+    /// <summary>
+    /// Row of tabs on top of a sheet (Settings): selected tab = orange like the Save button,
+    /// others = dark like Back. Mouse, Left/Right when focused, L1/R1 or Ctrl+Tab switch tabs.
+    /// </summary>
+    sealed class SheetTabStrip : Control
+    {
+        const int Gap = 8;
+        readonly string[] _tabs;
+        int _selected;
+        int _hover = -1;
+        Font? _tabFont;
+
+        public SheetTabStrip(string[] tabs)
+        {
+            SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.UserPaint |
+                     ControlStyles.OptimizedDoubleBuffer | ControlStyles.ResizeRedraw |
+                     ControlStyles.UserMouse | ControlStyles.Selectable, true);
+            _tabs = tabs;
+            BackColor = NativeTheme.CardTop;
+            Cursor = Cursors.Hand;
+            TabStop = true;
+            Height = 40;
+            _tabFont = NativeTheme.MakeBungee(16);
+        }
+
+        public event EventHandler? SelectedIndexChanged;
+
+        [System.ComponentModel.DesignerSerializationVisibility(System.ComponentModel.DesignerSerializationVisibility.Hidden)]
+        public int SelectedIndex
+        {
+            get => _selected;
+            set
+            {
+                var v = Math.Clamp(value, 0, _tabs.Length - 1);
+                if (v == _selected) return;
+                _selected = v;
+                Invalidate();
+                SelectedIndexChanged?.Invoke(this, EventArgs.Empty);
+            }
+        }
+
+        /// <summary>Previous/next tab, wrapping around.</summary>
+        public void Step(int direction) =>
+            SelectedIndex = (_selected + direction + _tabs.Length) % _tabs.Length;
+
+        Rectangle TabRect(int i)
+        {
+            var w = (Width - Gap * (_tabs.Length - 1)) / _tabs.Length;
+            return new Rectangle(i * (w + Gap), 0, w, Height);
+        }
+
+        int HitTest(Point p)
+        {
+            for (var i = 0; i < _tabs.Length; i++)
+                if (TabRect(i).Contains(p)) return i;
+            return -1;
+        }
+
+        protected override void OnPaintBackground(PaintEventArgs e)
+        {
+            // Same card gradient under our bounds (see ThemeSlider), so the gaps blend in.
+            var g = e.Graphics;
+            if (Parent != null)
+            {
+                var state = g.Save();
+                g.TranslateTransform(-Left, -Top);
+                using var br = new LinearGradientBrush(
+                    Parent.ClientRectangle,
+                    NativeTheme.CardTop,
+                    NativeTheme.CardBottom,
+                    160f);
+                g.FillRectangle(br, new Rectangle(Left, Top, Width, Height));
+                g.Restore(state);
+            }
+            else
+            {
+                using var br = new SolidBrush(NativeTheme.CardTop);
+                g.FillRectangle(br, ClientRectangle);
+            }
+        }
+
+        protected override void OnPaint(PaintEventArgs e)
+        {
+            var g = e.Graphics;
+            for (var i = 0; i < _tabs.Length; i++)
+            {
+                var r = TabRect(i);
+                var selected = i == _selected;
+                var back = selected
+                    ? (i == _hover ? NativeTheme.WumpaHot : NativeTheme.Wumpa)
+                    : (i == _hover ? Color.FromArgb(48, 32, 20) : Color.FromArgb(28, 18, 12));
+                using (var fill = new SolidBrush(back))
+                    g.FillRectangle(fill, r);
+
+                if (selected && Focused)
+                {
+                    using var focus = new Pen(NativeTheme.Sand, 2f);
+                    g.DrawRectangle(focus, r.X + 1, r.Y + 1, r.Width - 2, r.Height - 2);
+                }
+                else
+                {
+                    using var border = new Pen(selected
+                        ? Color.FromArgb(220, 255, 180, 60)
+                        : Color.FromArgb(140, 255, 200, 120), 1f);
+                    g.DrawRectangle(border, r.X, r.Y, r.Width - 1, r.Height - 1);
+                }
+
+                TextRenderer.DrawText(g, _tabs[i].ToUpperInvariant(), _tabFont ?? Font, r,
+                    selected ? Color.FromArgb(42, 18, 0) : NativeTheme.Sand,
+                    TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter |
+                    TextFormatFlags.SingleLine | TextFormatFlags.NoPadding);
+            }
+        }
+
+        protected override void OnGotFocus(EventArgs e)
+        {
+            Invalidate();
+            base.OnGotFocus(e);
+        }
+
+        protected override void OnLostFocus(EventArgs e)
+        {
+            Invalidate();
+            base.OnLostFocus(e);
+        }
+
+        protected override void OnMouseDown(MouseEventArgs e)
+        {
+            var hit = HitTest(e.Location);
+            if (e.Button == MouseButtons.Left && hit >= 0)
+            {
+                Focus();
+                SelectedIndex = hit;
+            }
+            base.OnMouseDown(e);
+        }
+
+        protected override void OnMouseMove(MouseEventArgs e)
+        {
+            var hit = HitTest(e.Location);
+            if (hit != _hover)
+            {
+                _hover = hit;
+                Invalidate();
+            }
+            base.OnMouseMove(e);
+        }
+
+        protected override void OnMouseLeave(EventArgs e)
+        {
+            _hover = -1;
+            Invalidate();
+            base.OnMouseLeave(e);
+        }
+
+        protected override void Dispose(bool disposing)
+        {
+            if (disposing)
+            {
+                _tabFont?.Dispose();
+                _tabFont = null;
+            }
+            base.Dispose(disposing);
         }
     }
 

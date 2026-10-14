@@ -160,7 +160,10 @@ sealed partial class LauncherWindow : Window
                     MoveSheetFocus(1);
                     break;
                 case Key.Tab:
-                    MoveSheetFocus(e.KeyModifiers.HasFlag(KeyModifiers.Shift) ? -1 : 1);
+                    var tabDir = e.KeyModifiers.HasFlag(KeyModifiers.Shift) ? -1 : 1;
+                    // Ctrl+Tab switches Settings tabs; plain Tab walks the controls.
+                    if (!e.KeyModifiers.HasFlag(KeyModifiers.Control) || !StepSheetTab(tabDir))
+                        MoveSheetFocus(tabDir);
                     break;
                 case Key.Left:
                     NudgeOrMove(-1);
@@ -251,6 +254,8 @@ sealed partial class LauncherWindow : Window
             CloseSheet();
             return;
         }
+        if (action.HasFlag(LauncherPadAction.PrevTab)) StepSheetTab(-1);
+        if (action.HasFlag(LauncherPadAction.NextTab)) StepSheetTab(1);
         if (action.HasFlag(LauncherPadAction.Up)) MoveSheetFocus(-1);
         if (action.HasFlag(LauncherPadAction.Down)) MoveSheetFocus(1);
         if (action.HasFlag(LauncherPadAction.Left)) NudgeOrMove(-1);
@@ -312,10 +317,23 @@ sealed partial class LauncherWindow : Window
         }
     }
 
+    /// <summary>L1/R1 or Ctrl+Tab: previous/next tab. Focus goes to the tabs so the hidden page drops it.</summary>
+    bool StepSheetTab(int direction)
+    {
+        if (_nav.OfType<SheetTabs>().FirstOrDefault() is not { } tabs) return false;
+        FocusNav(tabs);
+        tabs.Step(direction);
+        return true;
+    }
+
     void ActivateSheetFocused()
     {
         switch (FocusedNav())
         {
+            case SheetTabs:
+                // Confirm on the tabs enters the page.
+                MoveSheetFocus(1);
+                break;
             case INavItem item:
                 item.Activate();
                 break;
