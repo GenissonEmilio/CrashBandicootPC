@@ -244,7 +244,7 @@ internal sealed class InputSettingsSection : ISettingsSection
 
         ImGui.TableNextRow();
         ImGui.TableSetColumnIndex(0);
-        ImGui.TextUnformatted("FPS keys 1–5");
+        ImGui.TextUnformatted("FPS keys 1-5");
         ImGui.TableSetColumnIndex(1);
         bool fpsKeys = ConfigManager.View.FrameRateHotkeys;
         if (ImGui.Checkbox("Enabled##fpsHotkeys", ref fpsKeys))
@@ -255,7 +255,7 @@ internal sealed class InputSettingsSection : ISettingsSection
 
         ImGui.TableNextRow();
         ImGui.TableSetColumnIndex(0);
-        ImGui.TextUnformatted("Quick save F5–F8");
+        ImGui.TextUnformatted("Quick save F5-F8");
         ImGui.TableSetColumnIndex(1);
         bool saveStates = ConfigManager.View.SaveStates;
         if (ImGui.Checkbox("Enabled##saveStates", ref saveStates))

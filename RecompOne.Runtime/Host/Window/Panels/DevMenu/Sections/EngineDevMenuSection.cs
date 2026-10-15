@@ -37,7 +37,7 @@ internal sealed class EngineDevMenuSection : IDevMenuSection
         ImGui.Separator();
         ImGui.Spacing();
 
-        ImGui.TextUnformatted("Known pools (explains ~100–300 MB)");
+        ImGui.TextUnformatted("Known pools (explains ~100-300 MB)");
         ImGuiEx.TextDisabled("Managed / estimated GPU — not a full process accounting");
         ImGui.Spacing();
 

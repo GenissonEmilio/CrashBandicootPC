@@ -932,8 +932,11 @@ public static partial class FramePacing
             return;
         }
 
+        // PAL speed presents every 40 ms = 2.4 service slots; two would play
+        // the music at 50 Hz (83% tempo) while menus stay at 60.
+        int maxCatchUp = FrameClock.TargetHz < 30 ? 3 : 2;
         int n = 0;
-        while (now - _irqTs >= IrqPeriod && n < 2)
+        while (now - _irqTs >= IrqPeriod && n < maxCatchUp)
         {
             _irqTs += IrqPeriod;
             Runtime.DispatchIrq(0);

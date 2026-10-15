@@ -60,7 +60,7 @@ static class SettingsDialog
         var frameRate = AddChoice(activity, card, "Frame rate",
             ViewConfig.FrameRateLabels, ViewConfig.FrameRateToIndex(view.FrameRate), bodyFont, bodyBold);
         card.AddView(Hint(activity,
-            "Gameplay levels only — menus stay at 60 present / 30 game. Original and 60 dt both show ~60 fps; 60 dt has unique frames. 120/240 need a high-refresh phone.",
+            "Gameplay levels only — menus stay at 60 present / 30 game. Original and 60 dt both show ~60 fps; 60 dt has unique frames. 120/240 need a high-refresh phone. PAL speed: original game at 25 FPS, 17% slower, like a 50 Hz PAL TV.",
             bodyFont));
 
         var resolution = AddChoice(activity, card, "Internal resolution",

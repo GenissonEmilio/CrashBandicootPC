@@ -16,8 +16,9 @@ internal static class FrameRateSetting
         }
         ImGuiEx.TextDisabled("Gameplay and bonus. Menus, crate tally, and bonus save stay 30 FPS.");
         if (ConfigManager.View.FrameRateHotkeys)
-            ImGuiEx.TextDisabled("Keys 1–5: original, 60, 120, 240, uncapped.");
+            ImGuiEx.TextDisabled("Keys 1-5: original, 60, 120, 240, uncapped.");
         ImGuiEx.TextDisabled("This is a refresh cap. Speed is delta time (60 and 120 play the same).");
+        ImGuiEx.TextDisabled("PAL speed: original game at 25 FPS, 17% slower, like a 50 Hz PAL TV.");
         ImGuiEx.TextDisabled("Turn VSync off if 120/240 stay locked to the monitor.");
     }
 

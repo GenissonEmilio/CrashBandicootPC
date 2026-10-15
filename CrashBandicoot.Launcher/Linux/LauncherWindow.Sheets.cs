@@ -268,7 +268,8 @@ sealed partial class LauncherWindow
         var fullscreen = Nav(new ThemeCheck("Fullscreen") { Checked = view.Fullscreen });
         var widescreen = Nav(new ThemeCheck("Native widescreen (16:9)") { Checked = view.Widescreen });
         var frameRate = Nav(MakeCombo(
-            [(0, "Original (30 FPS)"), (60, "60 FPS"), (120, "120 FPS"), (240, "240 FPS"), (-1, "Uncapped")],
+            [(0, "Original (30 FPS)"), (60, "60 FPS"), (120, "120 FPS"), (240, "240 FPS"), (-1, "Uncapped"),
+                (25, "25 FPS (PAL speed)")],
             view.FrameRate));
         var internalRes = Nav(MakeCombo([(1, "Native (1x)"), (2, "2x"), (4, "4x"), (8, "8x (4K)")],
             view.InternalResolution));
@@ -304,7 +305,7 @@ sealed partial class LauncherWindow
                     WithMargin(widescreen, new Thickness(0, 0, 0, 14)),
                     Hint("Native 16:9 gameplay with a wider view. Crates and other objects stay visible in the extra view. Menus, map, and cutscenes stay 4:3."),
                     Row(Label("Frame rate", 202), frameRate, 14),
-                    Hint("Gameplay and bonus. Same speed as 30 FPS, unique frames at the chosen rate. Menus, crate tally, and bonus save stay 30. In-game keys 1–5 switch modes unless turned off in Controls."),
+                    Hint("Gameplay and bonus; menus and crate tally stay 30. 60–240: same speed as 30, unique frames. PAL speed: 25 FPS, 17% slower, like a PAL TV. Keys 1–5 switch modes."),
                     Row(Label("Internal resolution", 202), internalRes, 14),
                     Hint("Applies on next game start. Use 8x on 4K monitors.", 8),
                 },

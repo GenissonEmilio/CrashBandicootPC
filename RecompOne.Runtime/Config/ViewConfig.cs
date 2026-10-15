@@ -225,7 +225,15 @@ public class ViewConfig
     public const int FrameRateOriginal = 0;
     public const int FrameRateUncapped = -1;
 
-    public static readonly int[] FrameRateOptionValues = [0, 60, 120, 240, -1];
+    /// <summary>
+    /// 25 FPS present cap (#153). Below 30 the unlocked clock clamps every
+    /// step to one original 34-tick frame, so gameplay runs the 30 Hz logic
+    /// at 25/30 speed, like a 50 Hz PAL TV. Not the PAL disc's own tuning.
+    /// Last in the list so FPS keys 1–5 keep their presets.
+    /// </summary>
+    public const int FrameRatePalSpeed = 25;
+
+    public static readonly int[] FrameRateOptionValues = [0, 60, 120, 240, -1, FrameRatePalSpeed];
 
     public static readonly string[] FrameRateLabels =
     [
@@ -234,12 +242,13 @@ public class ViewConfig
         "120 FPS",
         "240 FPS",
         "Uncapped",
+        "25 FPS (PAL speed)",
     ];
 
     /// <summary>
     /// 0 = original 30 FPS pad. 60/120/240 = unlocked present cap; sim dt is
     /// wall time (1020 ticks/s) so 60 and 120 play at the same speed. -1 = uncapped.
-    /// Menus stay 30.
+    /// 25 = PAL speed (see <see cref="FrameRatePalSpeed"/>). Menus stay 30.
     /// </summary>
     public int FrameRate
     {

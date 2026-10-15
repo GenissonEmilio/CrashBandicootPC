@@ -102,7 +102,9 @@ sealed class AndroidEglContext : INativeContext
     EGLSurface CreateWindowSurface(Surface nativeWindow)
     {
         _nativeWindow = nativeWindow;
-        AndroidDisplayPacing.ApplySurface(nativeWindow, RecompOne.Runtime.Host.FrameClock.TargetHz);
+        // PAL speed caps the clock at 25; the display itself stays at 60.
+        AndroidDisplayPacing.ApplySurface(nativeWindow,
+            Math.Max(60.0, RecompOne.Runtime.Host.FrameClock.TargetHz));
 
         var surfaceAttributes = new[] { EGL14.EglNone };
         return EGL14.EglCreateWindowSurface(_display, _config, nativeWindow,

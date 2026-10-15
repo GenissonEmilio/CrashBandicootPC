@@ -84,8 +84,10 @@ static class AndroidGraphics
         FrameClock.SkipThrottle = false;
         FramePacing.ForceOriginal = rate == ViewConfig.FrameRateOriginal;
         double hz = PresentHz(rate);
-        if (Math.Abs(FrameClock.TargetHz - hz) > 0.5)
-            FrameClock.TargetHz = hz;
+        // PAL speed (#153): software cap only. The display stays at 60 for menus.
+        double capHz = rate == ViewConfig.FrameRatePalSpeed ? 25 : hz;
+        if (Math.Abs(FrameClock.TargetHz - capHz) > 0.5)
+            FrameClock.TargetHz = capHz;
         if (reset)
             FramePacing.OnFrameRateChanged();
         AndroidEglContext.Current?.SetPresentHz(hz);

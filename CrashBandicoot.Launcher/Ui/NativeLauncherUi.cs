@@ -1475,10 +1475,11 @@ public sealed class NativeLauncherUi : UserControl, ILauncherUi
         AddLabel("Frame rate");
         _frameRate = MakeCombo(new Point(controlX, y), [
             (0, "Original (30 FPS)"), (60, "60 FPS"), (120, "120 FPS"), (240, "240 FPS"), (-1, "Uncapped"),
+            (25, "25 FPS (PAL speed)"),
         ]);
         page.Controls.Add(_frameRate);
         y += rowGap;
-        AddHint("Gameplay and bonus. Same speed as 30 FPS, unique frames at the chosen rate. Menus, crate tally, and bonus save stay 30. In-game keys 1–5 switch modes unless turned off in Controls.");
+        AddHint("Gameplay and bonus; menus and crate tally stay 30. 60–240: same speed as 30, unique frames. PAL speed: 25 FPS, 17% slower, like a PAL TV. Keys 1–5 switch modes.");
 
         AddLabel("Internal resolution");
         _internalRes = MakeCombo(new Point(controlX, y), [

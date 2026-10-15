@@ -488,9 +488,12 @@ internal static class HostWindow
     {
         var view = ConfigManager.View;
         int rate = view.FrameRate;
-        FrameClock.SkipThrottle = view.VSync || rate == ViewConfig.FrameRateUncapped;
+        // PAL speed is a software cap below the monitor rate: VSync alone would present at 60.
+        FrameClock.SkipThrottle = rate == ViewConfig.FrameRateUncapped
+            || (view.VSync && rate != ViewConfig.FrameRatePalSpeed);
         FrameClock.TargetHz = rate switch
         {
+            ViewConfig.FrameRatePalSpeed => 25,
             120 => 120,
             240 => 240,
             _ => 60,
