@@ -48,7 +48,7 @@ You need your own dump of **Crash Bandicoot (USA)**, serial **SCUS-94900**, as a
 2. Run it and click **Select disc** to choose your `.chd` or `.cue`.
 3. Click **START GAME**.
 
-The first launch builds the game on your PC, which takes a moment. Later launches start straight away.
+The first launch builds the game on your PC, which takes a moment. Later launches start straight away. If the game window doesn't open, check the [System requirements](#system-requirements).
 
 ### Android
 
@@ -63,7 +63,7 @@ Install the `.apk` from [Releases](https://github.com/Matteo842/CrashBandicoot-L
 
 It's the same launcher as on Windows, with Settings, Controls, Mods and Cheats, usable with mouse, keyboard or gamepad. The first launch builds the game from your disc, which takes a minute or two. While you play, the launcher steps aside, and it comes back when you close the game. In **About** (the **i** button) you can add it to your applications menu, which also makes it show up in Steam's *Add a Non-Steam Game* list.
 
-You need a GPU with **OpenGL 4.3+** (Mesa, NVIDIA or AMD). Audio (OpenAL Soft) is bundled, so there's nothing else to install. The launcher window uses X11, which Wayland desktops provide through XWayland. If it doesn't start, attach `logs/last-run.txt` (next to the program) to your [bug report](https://github.com/Matteo842/CrashBandicoot-Launcher/issues).
+You need a GPU with **OpenGL 4.3+** (Mesa, NVIDIA or AMD) and a distribution with **glibc 2.34+** (see [System requirements](#system-requirements)). Audio (OpenAL Soft) is bundled, so there's nothing else to install. The launcher window uses X11, which Wayland desktops provide through XWayland. If it doesn't start, attach `logs/last-run.txt` (next to the program) to your [bug report](https://github.com/Matteo842/CrashBandicoot-Launcher/issues).
 
 <details>
 <summary><b>Linux: start the game without the launcher (Steam shortcuts, scripts)</b></summary>
@@ -102,6 +102,23 @@ LIBGL_ALWAYS_SOFTWARE=1 ./CrashBandicoot-Linux --run /path/to/game.cue
 - Command line options also work on Windows (`CrashBandicoot.exe --prepare …` / `--run …`). If `settings.json` already points to a valid disc, `--run` doesn't need the path.
 
 </details>
+
+---
+
+## System requirements
+
+| | Windows | Linux | Android |
+|---|---|---|---|
+| **System** | Windows 10 or 11 | glibc 2.34 or later: Ubuntu 22.04+, Debian 12+, Fedora 35+, RHEL / AlmaLinux / Rocky Linux 9+ | Android 8.0 (API 26) or later |
+| **CPU** | 64-bit x86 (`x64`) | 64-bit x86 (`x86-64`) | 64-bit ARM (`arm64-v8a`) |
+| **Graphics** | OpenGL 4.3 | OpenGL 4.3 | OpenGL ES 3.2 |
+| **Also needed** | [Visual C++ Redistributable 2015–2022 (x64)](https://aka.ms/vs/17/release/vc_redist.x64.exe) | X11 or XWayland | Nothing |
+
+- **No 32-bit builds** on any platform, and no native ARM build for Windows or Linux.
+- **OpenGL 4.3** works on most PC GPUs from 2012 on, for example NVIDIA GeForce 400 series, AMD Radeon HD 7000 series, Intel HD Graphics 4600 or newer. The game doesn't use Direct3D or Vulkan. If the game window doesn't open, update your GPU driver first.
+- **Visual C++ Redistributable (Windows):** most PCs already have it, because many games install it. Without it, the game can't open its window or play sound.
+- **Linux:** the launcher also needs fontconfig and ICU (`libicu`), which every desktop distribution includes. Older releases, such as Ubuntu 20.04 or Debian 11, have an older glibc and can't run the game.
+- **Android GPU:** besides OpenGL ES 3.2, the driver must support framebuffer fetch or `GL_EXT_blend_func_extended`. Adreno (Snapdragon) and Mali drivers do. The APK also contains `x86_64` libraries (emulators, some Chromebooks), but that gets less testing.
 
 ---
 
