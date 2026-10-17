@@ -25,6 +25,8 @@ public static partial class FramePacing
         uint level = m.ReadU32(Catalogs.Catalog.LevelIdAddr);
         if (NativeWideSkyArc(m, world, level))
             return NativeWideSkyArcRepairs(m, world, level);
+        if (NativeWideTawnaSky(m, world, level))
+            return NativeWideTawnaSkyRepairs(m, world, level);
         if (level == 6)
         {
             var machineryKey = new NativeWideSceneryKey(level, m.ReadU32(world.Header), m.ReadU32(world.Header + 4),
@@ -1104,6 +1106,60 @@ public static partial class FramePacing
                 }
             }
         }
+        _nativeWideSkyArcs[key] = repairs;
+        return repairs;
+    }
+
+    // The Tawna bonus rounds' sky is a flat camera-centred strip about 2700
+    // ahead, from X -3208 to +2472. The 16:9 view reaches X +/-3200 there, so
+    // the strip ended inside both bands; its top-left gradient cell, and the
+    // long round's top-right cell, also kept one half after the 4:3 cull. Half
+    // cells are completed, then each row is mirrored about its own end columns
+    // (rows end at different X). Above and below the strip the bands show the
+    // game's background fill, as the 4:3 view does (NativeWideSkyFillOf).
+    static bool NativeWideTawnaSky(IMemory m, NativeWideWorld world, uint level) =>
+        m.ReadU32(world.Header + 0x1C) == 1 && (level, world.PolyCount, world.VertexCount) is (36, 27, 26) or (51, 42, 39);
+
+    static IReadOnlyList<NativeWideRepair> NativeWideTawnaSkyRepairs(IMemory m, NativeWideWorld world, uint level)
+    {
+        var key = new NativeWideSceneryKey(level, m.ReadU32(world.Header), m.ReadU32(world.Header + 4),
+            m.ReadU32(world.Header + 8), world.PolyCount, world.VertexCount);
+        if (_nativeWideSkyArcs.TryGetValue(key, out var cached)) return cached;
+        var faces = NativeWideFacesOf(m, world);
+        var edges = new Dictionary<NativeWideEdge, int>();
+        var triangles = new List<(int Polygon, NativeWideClipVertex[] T)>();
+        for (int pi = 0; pi < faces.Length; pi++)
+        {
+            if (!faces[pi].Valid) continue;
+            var t = faces[pi].T;
+            triangles.Add((pi, t));
+            for (int k = 0; k < 3; k++)
+            {
+                var edge = NativeWideEdgeKey(t[k], t[(k + 1) % 3]);
+                edges[edge] = edges.GetValueOrDefault(edge) + 1;
+            }
+        }
+        var repairs = new List<NativeWideRepair>();
+        int originals = triangles.Count;
+        for (int i = 0; i < originals; i++)
+        {
+            var (pi, t) = triangles[i];
+            if (!NativeWideOppositeCorner(t, out var p, out var q, out var corner)
+                || edges[NativeWideEdgeKey(p, q)] != 1) continue;
+            triangles.Add((pi, [p, q, corner]));
+            repairs.Add(new(pi, p, q, corner));
+        }
+        static float Low(NativeWideClipVertex[] t) => Math.Min(t[0].Y, Math.Min(t[1].Y, t[2].Y));
+        static float High(NativeWideClipVertex[] t) => Math.Max(t[0].Y, Math.Max(t[1].Y, t[2].Y));
+        foreach (var row in triangles.GroupBy(e => (Low(e.T), High(e.T))))
+        {
+            float left = row.Min(e => e.T.Min(v => v.X)), right = row.Max(e => e.T.Max(v => v.X));
+            foreach (float end in (float[])[left, right])
+                foreach (var (pi, t) in row)
+                    repairs.Add(new(pi, t[0] with { X = 2 * end - t[0].X }, t[1] with { X = 2 * end - t[1].X },
+                        t[2] with { X = 2 * end - t[2].X }));
+        }
+        PaceLog($"native-wide level={level} sky repairs={repairs.Count}");
         _nativeWideSkyArcs[key] = repairs;
         return repairs;
     }

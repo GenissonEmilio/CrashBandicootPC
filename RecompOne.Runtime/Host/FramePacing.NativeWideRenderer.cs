@@ -52,9 +52,9 @@ public static partial class FramePacing
     static readonly int[] _nativeWideLighting = new int[8];
     static int _nativeWideFogFar, _nativeWideFogShift;
     static uint? _nativeWideFogBackground;
-    // The game's background fill of the top screen rows (colour, rows), when
-    // the side bands must show it too.
-    static (uint Color, int Rows)? _nativeWideSkyFill;
+    // The game's background fill of the top screen rows (colour, rows) and,
+    // optionally, of the rows below, when the side bands must show it too.
+    static (uint Color, int Rows, uint? Lower)? _nativeWideSkyFill;
     static int _nativeWideOtFar;
     // Projection of this frame's side pass, for object additions made after it.
     readonly record struct NativeWideView(int Projection, int ScreenX, int ScreenY, int DrawX, int DrawY,
@@ -176,7 +176,12 @@ public static partial class FramePacing
         if (GpuHle.NativeWideRendererActive && _nativeWideFogBackground is uint fogColor) clearColor = fogColor;
         backend.BeginWideDepth(clearColor);
         if (GpuHle.NativeWideRendererActive && _nativeWideFogBackground == null && _nativeWideSkyFill is { } sky)
-            backend.FillWideBands(gpu.CurrentHleDrawEnv.ClipY0, sky.Rows, sky.Color);
+        {
+            var env = gpu.CurrentHleDrawEnv;
+            backend.FillWideBands(env.ClipY0, sky.Rows, sky.Color);
+            if (sky.Lower is uint lower)
+                backend.FillWideBands(env.ClipY0 + sky.Rows, env.ClipY1 + 1 - env.ClipY0 - sky.Rows, lower);
+        }
         float dx = gpu.DrawOffsetX - _nativeWideDrawX;
         float dy = gpu.DrawOffsetY - _nativeWideDrawY;
         for (int i = 0; i < _nativeWidePending.Count; i++)
@@ -320,8 +325,10 @@ public static partial class FramePacing
                 | Math.Clamp(_nativeWideFarColor[1] >> 4, 0, 255) << 8
                 | Math.Clamp(_nativeWideFarColor[2] >> 4, 0, 255) << 16);
         // Pinstripe's skylights have transparent panes: the sky seen through
-        // them is the game's background fill, not scenery (#116).
-        if (m.ReadU32(Catalog.LevelIdAddr) == 8) _nativeWideSkyFill = NativeWideSkyFillOf(m, zone);
+        // them is the game's background fill, not scenery (#116). The Tawna
+        // rounds' sky strip shows both fills above and below it (#126).
+        if (m.ReadU32(Catalog.LevelIdAddr) is 8 or 36 or 51)
+            _nativeWideSkyFill = NativeWideSkyFillOf(m, zone, lower: m.ReadU32(Catalog.LevelIdAddr) != 8);
         if (_nativeWideShader == NativeWideShader.Ripple)
             for (int i = 0; i < 16; i++) _nativeWideRipple[i] = (int)m.ReadU32(0x1F800048u + (uint)i * 4u);
         if (_nativeWideShader is NativeWideShader.Tint or NativeWideShader.FogTint or NativeWideShader.Lamp)
@@ -1435,17 +1442,18 @@ public static partial class FramePacing
     // GpuUpdate clears the 4:3 frame with two fills when display flag 0x2000
     // is set (and 0x80000 is not): its top rows, the zone's fill height, in
     // the current fill colour, the rest in the zone's lower colour. The side
-    // bands are cleared to black; the upper fill is added here.
+    // bands are cleared to black; the upper fill is added here, and the lower
+    // one too when <paramref name="lower"/> is set (Tawna rounds' sky strip).
     const uint NativeWideFillColorAddr = 0x80057968u;
 
-    static (uint Color, int Rows)? NativeWideSkyFillOf(IMemory m, uint zone)
+    static (uint Color, int Rows, uint? Lower)? NativeWideSkyFillOf(IMemory m, uint zone, bool lower)
     {
         uint flags = m.ReadU32(DisplayFlagsAddr);
         if ((flags & 0x80000u) != 0 || (flags & 0x2000u) == 0) return null;
         int rows = (int)m.ReadU32(zone + 0x2E0u);
         if (rows is <= 0 or > 512) return null;
-        return (m.ReadU8(NativeWideFillColorAddr) | (uint)m.ReadU8(NativeWideFillColorAddr + 1) << 8
-            | (uint)m.ReadU8(NativeWideFillColorAddr + 2) << 16, rows);
+        static uint Rgb(IMemory m, uint at) => m.ReadU8(at) | (uint)m.ReadU8(at + 1) << 8 | (uint)m.ReadU8(at + 2) << 16;
+        return (Rgb(m, NativeWideFillColorAddr), rows, lower ? Rgb(m, zone + 0x310u) : (uint?)null);
     }
 
     static void NativeWideMoveRange(List<NativeWideTriangle> from, int start, List<NativeWideTriangle> to)
