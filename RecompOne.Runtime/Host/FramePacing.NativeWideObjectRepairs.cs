@@ -18,8 +18,9 @@ public static partial class FramePacing
     const int NativeWideBlimpVertices = 100;
     const int NativeWideBlimpPolygons = 96;
     // Near-row boundary from the far rim towards the camera, the polygon owning
-    // each boundary edge (its material colours the continuation), and the rim's
-    // outer piece as (inner vertex, outer vertex).
+    // each boundary edge, and the rim's outer piece as (inner vertex, outer
+    // vertex). The top is a checkerboard: a continuation takes the other colour
+    // of its row, which is the material of the opposite side's owner (#132).
     static readonly int[] NativeWideBlimpLeftEdge = [27, 28, 29, 53, 61];
     static readonly int[] NativeWideBlimpLeftOwners = [22, 26, 92, 90];
     static readonly int[] NativeWideBlimpRightEdge = [18, 19, 3, 94, 95];
@@ -101,16 +102,16 @@ public static partial class FramePacing
         _nativeWideObjectOpaque.Clear();
         _nativeWideObjectTransparent.Clear();
         if (!AddNativeWideBlimpSide(m, frame, header, polygons, NativeWideBlimpLeftEdge, NativeWideBlimpLeftOwners,
-                NativeWideBlimpLeftRimInner, NativeWideBlimpLeftRimOuter, rotation, translation, shift, view)
+                NativeWideBlimpRightOwners, NativeWideBlimpLeftRimInner, NativeWideBlimpLeftRimOuter, rotation, translation, shift, view)
             || !AddNativeWideBlimpSide(m, frame, header, polygons, NativeWideBlimpRightEdge, NativeWideBlimpRightOwners,
-                NativeWideBlimpRightRimInner, NativeWideBlimpRightRimOuter, rotation, translation, shift, view))
+                NativeWideBlimpLeftOwners, NativeWideBlimpRightRimInner, NativeWideBlimpRightRimOuter, rotation, translation, shift, view))
             return;
         _nativeWidePending.AddRange(_nativeWideObjectOpaque);
         _nativeWidePending.AddRange(_nativeWideObjectTransparent);
     }
 
     static bool AddNativeWideBlimpSide(IMemory m, uint frame, uint header, uint polygons,
-        int[] edge, int[] owners, int rimInner, int rimOuter, ReadOnlySpan<short> rotation,
+        int[] edge, int[] owners, int[] materials, int rimInner, int rimOuter, ReadOnlySpan<short> rotation,
         Vector3 translation, int shift, NativeWideView view)
     {
         // The vertex indices are confirmed by the polygons that own each edge.
@@ -126,7 +127,7 @@ public static partial class FramePacing
         Span<NativeWideClipVertex> triangle = stackalloc NativeWideClipVertex[3];
         for (int i = 0; i < owners.Length; i++)
         {
-            uint texinfo = m.ReadU32(header + 0x14u + NativeWideCvtxTexinfo(m, polygons, owners[i]) * 4u);
+            uint texinfo = m.ReadU32(header + 0x14u + NativeWideCvtxTexinfo(m, polygons, materials[i]) * 4u);
             // The patch is untextured and opaque; anything else is not this asset.
             if ((texinfo & 0xE0000000u) != 0x60000000u) return false;
             Vector3 a = NativeWideCvtxVertex(m, frame, edge[i]);
