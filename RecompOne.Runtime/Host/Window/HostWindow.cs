@@ -115,12 +115,14 @@ internal static class HostWindow
             _window = Silk.NET.Windowing.Window.Create(options);
             InstallGlfwErrorLog();
             ProbeGlContext();
+            DisableFullscreenAutoIconify();
             Console.WriteLine("[Host] window object created, initializing GLFW/GL…");
             Console.Out.Flush();
             _window.Load += OnLoad;
             _window.Render += OnRender;
             _window.Closing += OnClosing;
             _window.Initialize();
+            LogWindowEvents(_window);
             Console.WriteLine("[Host] OpenGL window ready");
 
             // GLFW defaults to a generic icon — use the exe/ApplicationIcon instead (Windows).
@@ -204,6 +206,35 @@ internal static class HostWindow
             throw new InvalidOperationException(
                 "OpenGL 4.3 Core context could not be created" + (_lastGlfwError != null ? $" ({_lastGlfwError})" : ""));
         glfw.DestroyWindow(probe);
+    }
+
+    /// <summary>
+    /// GLFW minimizes a fullscreen window (and restores the desktop video mode) as
+    /// soon as it loses focus. On Linux that fires while the launcher hides and on
+    /// some compositors keeps flipping, so fullscreen blinks between the game and a
+    /// black screen at ~1 FPS (#129). Windows never takes this path (the game is
+    /// embedded in the launcher), so only change it elsewhere.
+    /// </summary>
+    static void DisableFullscreenAutoIconify()
+    {
+        if (OperatingSystem.IsWindows() || !SilkGlfw.GlfwProvider.GLFW.IsValueCreated) return;
+        SilkGlfw.GlfwProvider.GLFW.Value.WindowHint(SilkGlfw.WindowHintBool.AutoIconify, false);
+    }
+
+    static int _windowEventLogCount;
+
+    /// <summary>Log fullscreen/minimize/focus changes on Linux so a report's last-run.txt shows them.</summary>
+    static void LogWindowEvents(IWindow window)
+    {
+        if (OperatingSystem.IsWindows()) return;
+        _windowEventLogCount = 0;
+        void Log(string text)
+        {
+            if (++_windowEventLogCount <= 40)
+                Console.WriteLine("[Host] window " + text);
+        }
+        window.StateChanged += state => Log("state " + state);
+        window.FocusChanged += focused => Log(focused ? "focused" : "lost focus");
     }
 
     static void ResetSessionState()
@@ -438,7 +469,11 @@ internal static class HostWindow
         }
 
         if (_window == null) return;
-        _window.WindowState = on ? WindowState.Fullscreen : WindowState.Normal;
+        // Window options already opened it fullscreen; a second SetWindowMonitor
+        // re-acquires the monitor (video mode, compositor bypass) for nothing.
+        var state = on ? WindowState.Fullscreen : WindowState.Normal;
+        if (_window.WindowState != state)
+            _window.WindowState = state;
     }
 
     /// <summary>
