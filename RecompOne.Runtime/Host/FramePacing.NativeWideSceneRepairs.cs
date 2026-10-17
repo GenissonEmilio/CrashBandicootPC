@@ -139,7 +139,17 @@ public static partial class FramePacing
                     new(5599, 6397, 6997, 122798, 123398, 0, 600, 127200),
                 ],
                 // The window keeps only the far half of its arch surround.
-                Complete: [], Mirror: [112, 113, 114], MirrorZ: 123398),
+                Complete: [2399, 2410], Mirror: [112, 113, 114], MirrorZ: 123398,
+                // Behind the near column the right end wall was left open between
+                // Z 119598 and 121198 (only a few cells and two half cells remain),
+                // which 16:9 sees past the column. One period of the same three
+                // columns, each column stretched to its own width (536/528 swap).
+                Spans:
+                [
+                    new(22799, 3197, 7701, 121198, 121734, 119598, 120134),
+                    new(22799, 4829, 7701, 121734, 122270, 120134, 120662),
+                    new(22799, 2397, 5725, 122270, 122798, 120662, 121198),
+                ]),
                 (3148, 3050, 27889, 111327) => new(
                 [
                     // Second gallery's right wall: one column per period. Each row
@@ -424,8 +434,14 @@ public static partial class FramePacing
 
     readonly record struct NativeWideWallBlock(float X, float YLow, float YHigh, float ZFrom, float ZTo,
         float DY, float Shift, float Until);
-    // Blocks to copy, polygons whose cut cell is completed, and polygons mirrored across MirrorZ.
-    sealed record NativeWideHallWalls(NativeWideWallBlock[] Blocks, int[] Complete, int[] Mirror, float MirrorZ);
+    // Cells of an X plane inside the source box, copied once with Z mapped
+    // linearly onto [ToFrom, ToTo].
+    readonly record struct NativeWideWallSpan(float X, float YLow, float YHigh, float ZFrom, float ZTo,
+        float ToFrom, float ToTo);
+    // Blocks to copy, polygons whose cut cell is completed, polygons mirrored across MirrorZ,
+    // and spans copied onto columns of a different width.
+    sealed record NativeWideHallWalls(NativeWideWallBlock[] Blocks, int[] Complete, int[] Mirror, float MirrorZ,
+        NativeWideWallSpan[]? Spans = null);
 
     static List<NativeWideRepair> NativeWideWallBlockRepairs(IMemory m, NativeWideWorld world, NativeWideHallWalls walls)
     {
@@ -470,6 +486,19 @@ public static partial class FramePacing
                     repairs.Add(new(pi, t[0] with { Y = t[0].Y + block.DY, Z = t[0].Z + dz, U = u0, V = v0 },
                         t[1] with { Y = t[1].Y + block.DY, Z = t[1].Z + dz, U = u1, V = v1 },
                         t[2] with { Y = t[2].Y + block.DY, Z = t[2].Z + dz, U = u2, V = v2 }));
+            }
+            foreach (var span in walls.Spans ?? [])
+            {
+                bool inside = true;
+                foreach (var v in t)
+                    inside &= v.X + hx == span.X && v.Y + hy >= span.YLow && v.Y + hy <= span.YHigh
+                        && v.Z + hz >= span.ZFrom && v.Z + hz <= span.ZTo;
+                if (!inside || !TryNativeWideMaterial(m, world, pi, 0, out _, out _,
+                    out short u0, out short v0, out short u1, out short v1, out short u2, out short v2)) continue;
+                float scale = (span.ToTo - span.ToFrom) / (span.ZTo - span.ZFrom);
+                float Map(float z) => span.ToFrom - hz + (z + hz - span.ZFrom) * scale;
+                repairs.Add(new(pi, t[0] with { Z = Map(t[0].Z), U = u0, V = v0 },
+                    t[1] with { Z = Map(t[1].Z), U = u1, V = v1 }, t[2] with { Z = Map(t[2].Z), U = u2, V = v2 }));
             }
         }
         float mirror = 2 * (walls.MirrorZ - hz);
