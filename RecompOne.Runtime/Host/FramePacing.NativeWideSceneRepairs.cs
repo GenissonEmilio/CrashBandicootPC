@@ -222,8 +222,22 @@ public static partial class FramePacing
                     // a little above it too.
                     new(new(97593, -28805, -6), new(98393, -28005, -6), new(0, 800, 0)),
                     new(new(97593, -28805, -6), new(98393, -28005, -6), new(800, 800, 0)),
+                    // The first platform's west end, at the left wall: its front
+                    // and top keep only cells from X 91593 (the top's first cell
+                    // is half); one 800 period (vertex colours) is copied west.
+                    // Its first merlon kept only its top; merlons repeat every 400.
+                    new(new(91593, -30405, 1594), new(92393, -30005, 1594), new(-800, 0, 0)),
+                    new(new(91593, -30005, 1194), new(91993, -30005, 1594), new(-800, 0, 0), Complete: true),
+                    new(new(91593, -30005, 1194), new(91993, -30005, 1594), Vector3.Zero, Complete: true),
+                    new(new(91993, -30005, 1194), new(92393, -30005, 1594), new(-800, 0, 0)),
+                    new(new(91617, -30005, 1218), new(91977, -29805, 1578), new(-400, 0, 0)),
                 ], [NativeWideXPlane(91193), NativeWideXPlane(97593)]),
-                (2457, 2298, 93679, -5998) => new([], [NativeWideXPlane(91199), NativeWideXPlane(97599)]),
+                // Above it, the right wall's top kept one triangle of its 800 cell;
+                // completed, it continues as far as the wall (Z 1994).
+                (2457, 2298, 93679, -5998) => new(
+                    [new(new(97599, -12006, 394), new(98399, -12006, 1194), Vector3.Zero, Complete: true)],
+                    [NativeWideXPlane(91199), NativeWideXPlane(97599),
+                        new(new(97599, -12006, 394), new(98399, -12006, 1194), Distance: 800)]),
                 // The level's end: Crash warps out on a pillar between two
                 // platforms, each with the same symmetric tower (centres X 800 and
                 // 8796). Only the lower right half of the left one survived the
@@ -245,7 +259,15 @@ public static partial class FramePacing
                     new(new(1600, -12400, 1234), new(2000, -12000, 1554), new(0, 0, 800)),
                 ],
                 // The pit wall; the merlons on it reach X 1992.
-                [new(new(1590, -14400, -3000), new(1990, -12000, 1600))]),
+                [new(new(1590, -14400, -3000), new(1990, -12000, 1600))],
+                // The broken leaning column far behind it lost the lower two
+                // cells of its west face: the middle one kept one triangle, the
+                // bottom one ends at the next face's edge (X -1096 Y -14808).
+                Places:
+                [
+                    new(345, new(-1400, -12424, -5110), new(-712, -12520, -5398), new(-856, -13424, -5478)),
+                    new(345, new(-1544, -13328, -5190), new(-856, -13424, -5478), new(-1096, -14808, -5598)),
+                ]),
                 _ => null,
             };
         bool scenery = gate || fortress || jungle || castle || slippery || upstream || creek || creekNext || hog
@@ -568,7 +590,12 @@ public static partial class FramePacing
     // Copies, boxes of walls and floors whose open near edges continue toward the
     // camera, rows of cells to fill, and terrain to continue sideways.
     sealed record NativeWideCopies(NativeWideCopy[] Copies, NativeWideBox[] NearWalls, NativeWideGrid[]? Grids = null,
-        NativeWideTerrain? Terrain = null, NativeWideSymmetry? Symmetry = null);
+        NativeWideTerrain? Terrain = null, NativeWideSymmetry? Symmetry = null, NativeWidePlace[]? Places = null);
+    // A cell of an irregular object (a leaning, broken column), of which the
+    // 4:3 cull kept a few triangles: the polygon's vertices, in their order, are
+    // placed at absolute A, B, C with their own texture and colour (unless they
+    // are there already), and the cell is completed opposite B (A + C - B).
+    readonly record struct NativeWidePlace(int Polygon, Vector3 A, Vector3 B, Vector3 C);
     // Direction, when set, continues open edges facing it instead of +Z, for faces
     // in any plane, by Distance.
     readonly record struct NativeWideBox(Vector3 Min, Vector3 Max, Vector3? Direction = null, float Distance = 1200);
@@ -626,6 +653,22 @@ public static partial class FramePacing
             NativeWideTerrainRepairs(m, world, origin, terrain, repairs);
         if (scenery.Symmetry != null)
             NativeWideSymmetryRepairs(m, world, origin, scenery.Symmetry, repairs);
+        foreach (var place in scenery.Places ?? [])
+        {
+            if ((uint)place.Polygon >= (uint)world.PolyCount || !TryNativeWideMaterial(m, world, place.Polygon, 0,
+                out _, out _, out short u0, out short v0, out short u1, out short v1, out short u2, out short v2)) continue;
+            uint poly = world.Polygons + (uint)place.Polygon * 8;
+            NativeWidePolygonVertices(FastU32(m, poly), FastU32(m, poly + 4), out int a, out int b, out int c);
+            NativeWideClipVertex At(int vertex, Vector3 to, short u, short v) =>
+                ReadNativeWideLocal(m, world, vertex) with { X = to.X - origin.X, Y = to.Y - origin.Y, Z = to.Z - origin.Z, U = u, V = v };
+            var pa = At(a, place.A, u0, v0); var pb = At(b, place.B, u1, v1); var pc = At(c, place.C, u2, v2);
+            if (Position(pa) != Position(ReadNativeWideLocal(m, world, a)) || Position(pb) != Position(ReadNativeWideLocal(m, world, b))
+                || Position(pc) != Position(ReadNativeWideLocal(m, world, c)))
+                repairs.Add(new(place.Polygon, pa, pb, pc));
+            repairs.Add(new(place.Polygon, pa, pc, new(pa.X + pc.X - pb.X, pa.Y + pc.Y - pb.Y, pa.Z + pc.Z - pb.Z,
+                Math.Clamp(pa.R + pc.R - pb.R, 0, 255), Math.Clamp(pa.G + pc.G - pb.G, 0, 255),
+                Math.Clamp(pa.B + pc.B - pb.B, 0, 255), pa.U + pc.U - pb.U, pa.V + pc.V - pb.V)));
+        }
         return repairs;
     }
 
@@ -948,12 +991,15 @@ public static partial class FramePacing
     // Faces inside the boxes whose planes run along Z (walls, floors): each open
     // edge where the surface ends toward the camera (+Z) continues 1200 units
     // further, as mirrored tiles of its own texture. Rows of a wall end at
-    // different depths but never overlap, so neither do their strips.
+    // different depths but never overlap, so neither do their strips. An edge
+    // shared with a face toward the camera is the corner of a closed block (the
+    // Lost City's relief walls in front of the climb's side walls), not an end.
     static void NativeWideNearWallRepairs(IMemory m, NativeWideWorld world, Vector3 origin, NativeWideBox[] boxes,
         List<NativeWideRepair> repairs)
     {
         var faces = new List<(int Polygon, NativeWideClipVertex[] T, NativeWideBox Box)>();
         var edges = new Dictionary<NativeWideEdge, int>();
+        var closed = new HashSet<NativeWideEdge>();
         for (int pi = 0; pi < world.PolyCount; pi++)
         {
             uint poly = world.Polygons + (uint)pi * 8;
@@ -961,6 +1007,8 @@ public static partial class FramePacing
             NativeWideClipVertex[] t = [ReadNativeWideLocal(m, world, a), ReadNativeWideLocal(m, world, b),
                 ReadNativeWideLocal(m, world, c)];
             var normal = Vector3.Cross(Position(t[1]) - Position(t[0]), Position(t[2]) - Position(t[0]));
+            if (Math.Abs(normal.Z) > normal.Length() * 0.999f)
+                for (int ei = 0; ei < 3; ei++) closed.Add(NativeWideEdgeKey(t[ei], t[(ei + 1) % 3]));
             int box = Array.FindIndex(boxes, box => t.All(v =>
                 Position(v) + origin == Vector3.Clamp(Position(v) + origin, box.Min, box.Max)));
             if (box < 0 || (boxes[box].Direction == null && Math.Abs(normal.Z) > normal.Length() * 0.001f)) continue;
@@ -980,7 +1028,9 @@ public static partial class FramePacing
             for (int ei = 0; ei < 3; ei++)
             {
                 var a = t[ei]; var b = t[(ei + 1) % 3]; var c = t[(ei + 2) % 3];
-                if (edges[NativeWideEdgeKey(a, b)] != 1 || Vector3.Dot(NativeWideOutward(a, b, c), direction) <= 1) continue;
+                var key = NativeWideEdgeKey(a, b);
+                if (edges[key] != 1 || (box.Direction == null && closed.Contains(key))
+                    || Vector3.Dot(NativeWideOutward(a, b, c), direction) <= 1) continue;
                 AddNativeWideSceneryStrip(repairs, pi, a, b, c, uv[ei], uv[(ei + 1) % 3], uv[(ei + 2) % 3],
                     direction, distance: box.Distance);
             }

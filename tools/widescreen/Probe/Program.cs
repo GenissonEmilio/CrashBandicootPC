@@ -7,7 +7,7 @@
 //   --script "path:<startFrame>:<unitsPerSecond>:x,y,z[,speed];..."  (wide.py route prints one)
 //            or "<from>-<to>:<Button>+<Button>,..." pad ranges in frames
 // Environment: VOID=1 clears the side bands to magenta; NOFIX=1 drops every scene
-// repair (before/after pairs); NOCANOPY=1 drops the jungle canopy backdrop; NOEARLY=1 disables early ruins-object spawns; OBJLOG=<type> logs live objects of a GOOL type; DUMPVRAM=<render,...> dumps VRAM; BLOCK=<hex,...> limits
+// repair (before/after pairs); NOCANOPY=1 drops the jungle canopy backdrop; NOSKY=1 drops the sky arc repairs; NOEARLY=1 disables early ruins-object spawns; OBJLOG=<type> logs live objects of a GOOL type; DUMPVRAM=<render,...> dumps VRAM; BLOCK=<hex,...> limits
 // which GOOL events to Crash are dropped while flying (default: all). STATE=<slotN.state> loads
 // a save state at frame STATEAT (default 120): the exact place and camera of a player's screenshot.
 // PACELOG=1 turns on the FramePacing diagnostics log. SNAPFROM=<frame> skips captures before that frame.
@@ -230,6 +230,11 @@ var canopyOf = typeof(FramePacing).GetMethod("NativeWideCanopyOf", BindingFlags.
 using var noCanopy = Environment.GetEnvironmentVariable("NOCANOPY") == "1"
     ? new Hook(canopyOf, typeof(NoFix).GetMethod(nameof(NoFix.None))!.MakeGenericMethod(canopyOf.ReturnType))
     : null;
+// NOSKY=1 drops the sky arc repairs, so with VOID=1 holes the extended sky hid show magenta.
+using var noSky = Environment.GetEnvironmentVariable("NOSKY") == "1"
+    ? new Hook(typeof(FramePacing).GetMethod("NativeWideSkyArc", BindingFlags.Static | BindingFlags.NonPublic)!,
+        typeof(NoFix).GetMethod(nameof(NoFix.NoArc))!)
+    : null;
 
 using var draw = new Hook(typeof(LibGpu).GetMethod(nameof(LibGpu.DrawOTag))!,
     (Action<Action<CpuContext, IMemory>, CpuContext, IMemory>)((original, c, m) =>
@@ -317,4 +322,5 @@ static class NoFix
 {
     public static IReadOnlyList<T> Empty<T>(Func<IMemory, object, IReadOnlyList<T>> original, IMemory m, object world) => [];
     public static T? None<T>(Func<uint, T> original, uint level) => default;
+    public static bool NoArc(Func<IMemory, object, uint, bool> original, IMemory m, object world, uint level) => false;
 }
