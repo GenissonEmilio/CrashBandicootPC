@@ -900,6 +900,8 @@ public static partial class FramePacing
     readonly record struct NativeWideGrid(Vector3 Min, Vector3 Max, float Cell, float From, float To,
         float[]? Repeat = null);
 
+    const float NativeWideGridSlack = 24;
+
     static void NativeWideGridRepairs(IMemory m, NativeWideWorld world, Vector3 origin, NativeWideGrid[] grids,
         List<NativeWideRepair> repairs)
     {
@@ -923,7 +925,17 @@ public static partial class FramePacing
                 // Only cells of the grid's width: foliage cards in the same planes stay single.
                 float x0 = t.Min(v => v.X);
                 if (Math.Abs(t.Max(v => v.X) - x0 - grid.Cell) > grid.Cell / 16) continue;
+                // Cell corners can sit a few units off the row's band (the Beach's
+                // terraces): such cells still belong to the row.
                 var rowKey = (top ? 1 : 2, top ? t[0].Y : t[0].Z, t.Min(Band), t.Max(Band));
+                foreach (var key in rows.Keys)
+                    if (key.Axis == rowKey.Item1 && key.Plane == rowKey.Item2
+                        && Math.Abs(key.Low - rowKey.Item3) <= NativeWideGridSlack
+                        && Math.Abs(key.High - rowKey.Item4) <= NativeWideGridSlack)
+                    {
+                        rowKey = key;
+                        break;
+                    }
                 if (!rows.TryGetValue(rowKey, out var cells)) rows[rowKey] = cells = [];
                 if (!cells.TryGetValue(x0, out var cell)) cells[x0] = cell = [];
                 cell.Add((pi, t));
@@ -939,7 +951,7 @@ public static partial class FramePacing
                     var tris = cell.Select(e => new NativeWideRepair(e.Polygon, e.T[0], e.T[1], e.T[2])).ToList();
                     if (cell.Count == 1)
                     {
-                        if (!NativeWideOppositeCorner(cell[0].T, out var p, out var q, out var corner)) continue;
+                        if (!NativeWideOppositeCorner(cell[0].T, out var p, out var q, out var corner, 0.05f)) continue;
                         filled.Add(new(cell[0].Polygon, p, q, corner));
                         tris.Add(filled[^1]);
                     }
@@ -976,13 +988,16 @@ public static partial class FramePacing
 
     // The right-angle corner r of a half cell and its other vertices p, q: the
     // missing corner continues both edges in position, texture and colour.
+    // <paramref name="skew"/> accepts corners off square by that cosine (cells
+    // whose corners sit a few units off the grid).
     static bool NativeWideOppositeCorner(NativeWideClipVertex[] t, out NativeWideClipVertex p,
-        out NativeWideClipVertex q, out NativeWideClipVertex corner)
+        out NativeWideClipVertex q, out NativeWideClipVertex corner, float skew = 0)
     {
         for (int r = 0; r < 3; r++)
         {
             var right = t[r]; p = t[(r + 1) % 3]; q = t[(r + 2) % 3];
-            if (Vector3.Dot(Position(p) - Position(right), Position(q) - Position(right)) != 0) continue;
+            Vector3 toP = Position(p) - Position(right), toQ = Position(q) - Position(right);
+            if (Math.Abs(Vector3.Dot(toP, toQ)) > skew * toP.Length() * toQ.Length()) continue;
             corner = new(p.X + q.X - right.X, p.Y + q.Y - right.Y, p.Z + q.Z - right.Z,
                 Math.Clamp(p.R + q.R - right.R, 0, 255), Math.Clamp(p.G + q.G - right.G, 0, 255),
                 Math.Clamp(p.B + q.B - right.B, 0, 255), p.U + q.U - right.U, p.V + q.V - right.V);
@@ -1059,6 +1074,9 @@ public static partial class FramePacing
             or (32, 40, 30)
             // N. Sanity Beach: +/-54°; its upper row reaches only +/-36°.
             or (9, 21, 19);
+
+    // Lower end of the Beach sky's stretched bottom row (its haze).
+    const float NativeWideBeachHazeY = -4096;
 
     static IReadOnlyList<NativeWideRepair> NativeWideSkyArcRepairs(IMemory m, NativeWideWorld world, uint level)
     {
@@ -1183,7 +1201,8 @@ public static partial class FramePacing
                     if (a.Y != bottom || b.Y != bottom || c.Y == bottom) continue;
                     NativeWideClipVertex top0 = a with { V = a.V - 0.5f * Math.Sign(a.V - c.V) },
                         top1 = b with { V = b.V - 0.5f * Math.Sign(b.V - c.V) };
-                    NativeWideClipVertex low0 = top0 with { Y = -4096 }, low1 = top1 with { Y = -4096 };
+                    NativeWideClipVertex low0 = top0 with { Y = NativeWideBeachHazeY },
+                        low1 = top1 with { Y = NativeWideBeachHazeY };
                     repairs.Add(new(t.Polygon, top0, top1, low1));
                     repairs.Add(new(t.Polygon, top0, low1, low0));
                 }

@@ -23,6 +23,8 @@ public static partial class FramePacing
     static readonly List<NativeWideTriangle> _nativeWideTransparent = new(128);
     static readonly List<NativeWideTriangle> _nativeWideExtensions = new(256);
     static readonly List<NativeWideTriangle> _nativeWideUnderBackdrop = new(256);
+    // N. Sanity Beach's sky haze, drawn before the fills under its sky.
+    static readonly List<NativeWideTriangle> _nativeWideHaze = new(64);
     // Neighbour-zone scenery inside the 4:3 core (#105), submitted just before
     // the first retail world primitive so the original image paints over it.
     static readonly List<NativeWideTriangle> _nativeWideCorePending = new(512);
@@ -455,9 +457,11 @@ public static partial class FramePacing
         _nativeWideTransparent.Clear();
         _nativeWideExtensions.Clear();
         _nativeWideUnderBackdrop.Clear();
+        _nativeWideHaze.Clear();
         _nativeWideCoreOpaque.Clear();
         _nativeWideCoreTransparent.Clear();
-        bool underBackdrop = NativeWideFillsUnderBackdrop(m);
+        bool beachSky = NativeWideBeachSky(m, worlds, drawWorldCount);
+        bool underBackdrop = NativeWideFillsUnderBackdrop(m) || beachSky;
         Span<NativeWideClipVertex> repairVertices = stackalloc NativeWideClipVertex[3];
         int clippedPolygons = 0;
         int candidates = 0;
@@ -502,6 +506,11 @@ public static partial class FramePacing
                     AddNativeWideClippedTriangle(repairVertices, projection, screenX, screenY,
                         gpu.DrawOffsetX, gpu.DrawOffsetY, viewCenterX, viewCenterY, coreHalf, wideHalf, halfHeight,
                         repairFlags, !repair.Culled, _nativeWideOpaque, _nativeWideTransparent);
+                    if (beachSky && NativeWideBeachHaze(m, world, repair))
+                    {
+                        NativeWideMoveRange(_nativeWideOpaque, opaqueStart, _nativeWideHaze);
+                        NativeWideMoveRange(_nativeWideTransparent, transparentStart, _nativeWideHaze);
+                    }
                     if (behind && !repair.Boundary)
                     {
                         float back = NativeWideRankBack(repair, tie);
@@ -570,6 +579,7 @@ public static partial class FramePacing
         // Fills behind all scenery go first, so the backdrop (no depth) paints
         // over them where it shows, e.g. through The Lab's windows.
         _nativeWideUnderBackdrop.Sort(static (a, b) => b.Depth.CompareTo(a.Depth));
+        _nativeWidePending.AddRange(_nativeWideHaze);
         _nativeWidePending.AddRange(_nativeWideUnderBackdrop);
         for (int i = 0; i < _nativeWideOpaque.Count; i++)
         {
@@ -1440,7 +1450,7 @@ public static partial class FramePacing
     // are boundary repairs), and the Jungle Rollers, Upstream, Boulder Dash
     // and Koala Kong skirts.
     static bool NativeWideRepairsBehind(IMemory m, NativeWideWorld world) =>
-        world.PolyCount > 0 && (NativeWideSunsetTemple(m, world) || m.ReadU32(Catalog.LevelIdAddr) is 3 or 6 or 12 or 15 or 19 or 33 or 41);
+        world.PolyCount > 0 && (NativeWideSunsetTemple(m, world) || m.ReadU32(Catalog.LevelIdAddr) is 3 or 6 or 9 or 12 or 15 or 19 or 33 or 41);
 
     // Cortex Power's corridors run side by side, each path's walls hiding the
     // other: drawn only from their own zone, they came and went as the camera
@@ -1451,6 +1461,22 @@ public static partial class FramePacing
     // continuations run past the side walls' windows; in Cortex Power, the
     // building front of the opening camera continues past the sky band.
     static bool NativeWideFillsUnderBackdrop(IMemory m) => m.ReadU32(Catalog.LevelIdAddr) is 3 or 41;
+
+    // N. Sanity Beach's sky ends at the horizon; below it, its bottom texel
+    // row stretched downward is only haze where the island should go on
+    // (#137). Where the sky is drawn (the beach), the skirts go under the sky
+    // but over that haze: they replace it, never the sky above the horizon.
+    static bool NativeWideBeachSky(IMemory m, NativeWideWorld[] worlds, int worldCount)
+    {
+        if (m.ReadU32(Catalog.LevelIdAddr) != 9) return false;
+        for (int wi = 0; wi < worldCount; wi++)
+            if (worlds[wi].PolyCount > 0 && FastU32(m, worlds[wi].Header + 0x1Cu) != 0) return true;
+        return false;
+    }
+
+    static bool NativeWideBeachHaze(IMemory m, NativeWideWorld world, NativeWideRepair repair) =>
+        FastU32(m, world.Header + 0x1Cu) != 0 && (repair.A.Y == NativeWideBeachHazeY
+            || repair.B.Y == NativeWideBeachHazeY || repair.C.Y == NativeWideBeachHazeY);
 
     // GpuUpdate clears the 4:3 frame with two fills when display flag 0x2000
     // is set (and 0x80000 is not): its top rows, the zone's fill height, in

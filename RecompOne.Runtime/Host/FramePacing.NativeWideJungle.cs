@@ -5,8 +5,9 @@ namespace RecompOne.Runtime.Host;
 
 public static partial class FramePacing
 {
-    // Jungle Rollers (level 12), Upstream (level 15), Boulder Dash (level 19)
-    // and the Koala Kong cave (level 33) have no sky: every mesh is ground,
+    // N. Sanity Beach past the beach (level 9, #137), Jungle Rollers (level 12),
+    // Upstream (level 15), Boulder Dash (level 19) and the Koala Kong cave
+    // (level 33) have no sky: every mesh is ground,
     // banks, trunks, plants or cave rock cut along the 4:3 view (the retail
     // draw lists keep only what the 4:3 camera sees), and the 16:9 view saw
     // black past every cut. Open edges are continued outward in the plane of
@@ -520,18 +521,18 @@ public static partial class FramePacing
         uint level = m.ReadU32(Catalogs.Catalog.LevelIdAddr);
         var skirts = level switch
         {
-            12 => NativeWideJungleSkirts, 15 => NativeWideUpstreamSkirts, 19 => NativeWideBoulderDashSkirts,
-            33 => NativeWideKoalaSkirts, _ => null
+            9 => NativeWideBeachSkirts, 12 => NativeWideJungleSkirts, 15 => NativeWideUpstreamSkirts,
+            19 => NativeWideBoulderDashSkirts, 33 => NativeWideKoalaSkirts, _ => null
         };
         if (skirts == null && level != 18) return repairs;
         var key = new NativeWideSceneryKey(level, m.ReadU32(world.Header), m.ReadU32(world.Header + 4),
             m.ReadU32(world.Header + 8), world.PolyCount, world.VertexCount);
         if (_nativeWideSkirts.TryGetValue(key, out var cached)) return cached;
-        // Jungle Rollers' hand-made opening bank and trunk strips keep their
-        // true depth. Upstream's opening bank strips overlap the retail bank
+        // Jungle Rollers' hand-made opening bank and trunk strips, and N. Sanity
+        // Beach's sky, sand, terraces and pillar, keep their true depth. Upstream's opening bank strips overlap the retail bank
         // they continue, so they stay behind the scenery like the skirts.
         var all = new List<NativeWideRepair>(repairs.Count);
-        foreach (var repair in repairs) all.Add(repair with { Boundary = level == 12 });
+        foreach (var repair in repairs) all.Add(repair with { Boundary = level is 9 or 12 });
         int authored = all.Count;
         if (level == 19 && NativeWideBoulderDashGates.TryGetValue(((int)m.ReadU32(world.Header),
                 (int)m.ReadU32(world.Header + 8)), out var gate))
