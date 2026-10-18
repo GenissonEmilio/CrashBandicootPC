@@ -111,6 +111,8 @@ foreach (var mesh in index.GetProperty("meshes").EnumerateArray())
         foreach (var v in corners) row.AddRange([F(v, "U"), F(v, "V"), F(v, "R"), F(v, "G"), F(v, "B")]);
         var culled = t.GetProperty("Culled");
         row.Add(culled != null && (bool)culled.GetValue(repair)!);
+        var rank = t.GetProperty("Rank");
+        row.Add(rank != null ? (float)rank.GetValue(repair)! : 0f);
         rows.Add([.. row]);
     }
     if (rows.Count > 0) Console.WriteLine($"{name}: {rows.Count} repair triangles, {ms:0.0} ms");

@@ -465,6 +465,11 @@ public static partial class FramePacing
         {
             var world = worlds[wi];
             bool behind = NativeWideRepairsBehind(m, world);
+            // Equal-rank fills of two meshes: the same mesh wins in every zone.
+            int tie = 0;
+            if (behind)
+                for (int oi = 0; oi < drawWorldCount; oi++)
+                    if (NativeWideMeshOrder(m, worlds[oi]) < NativeWideMeshOrder(m, world)) tie++;
             // Repairs were tuned with each mesh's own zone; neighbours draw only authored polygons,
             // except in levels whose repairs suit every camera drawing the mesh.
             var repairs = world.Neighbor && !NativeWideNeighborRepairs(m)
@@ -499,8 +504,9 @@ public static partial class FramePacing
                         repairFlags, !repair.Culled, _nativeWideOpaque, _nativeWideTransparent);
                     if (behind && !repair.Boundary)
                     {
-                        NativeWideBehindScenery(_nativeWideOpaque, opaqueStart);
-                        NativeWideBehindScenery(_nativeWideTransparent, transparentStart);
+                        float back = NativeWideRankBack(repair, tie);
+                        NativeWideBehindScenery(_nativeWideOpaque, opaqueStart, back);
+                        NativeWideBehindScenery(_nativeWideTransparent, transparentStart, back);
                         if (underBackdrop)
                         {
                             NativeWideMoveRange(_nativeWideOpaque, opaqueStart, _nativeWideUnderBackdrop);

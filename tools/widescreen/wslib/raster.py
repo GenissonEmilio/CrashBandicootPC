@@ -126,7 +126,10 @@ def render(cam, meshes, repairs=None, xrange=None, w=W, h=H, cull=True):
             tris = cs.reshape(-1, 3, 3)
             # Behind-scenery repairs only fill what nothing else covers.
             # Backdrop repairs: with the backdrop, or (behind fills under the backdrop) farther still.
+            # Ranked behind fills are layered by rank, then by a fixed mesh order (origin).
+            tie = sorted((tuple(mm.trans[:2]), mi) for mi, mm in enumerate(meshes)).index((tuple(m.trans[:2]), li))
             bias = np.array([(3e9 if int(r[2]) == 2 else 1e9) if m.backdrop else {0: 0.0, 1: 1e6, 2: 2e9}[int(r[2])]
+                             + (r[4] * 1e4 + tie * 100 if int(r[2]) and len(r) > 4 and r[4] > 0 else 0)
                              for r in rs])
             # Culled repairs (4th field) are back-face culled like the scenery.
             nocull = np.array([not (len(r) > 3 and r[3]) for r in rs])

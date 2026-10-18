@@ -64,7 +64,7 @@ def _zone_distance(z, p):
 
 
 def load_repairs(path):
-    """{mesh: [(polygon, 3x3 absolute, behind, culled)]} from the C# dump (RepairDump)."""
+    """{mesh: [(polygon, 3x3 absolute, behind, culled, rank)]} from the C# dump (RepairDump)."""
     if not path:
         return None
     data = json.load(open(path))
@@ -73,7 +73,7 @@ def load_repairs(path):
     out = {}
     for name, e in data["meshes"].items():
         out[name] = [(r[0], np.array(r[1:10], float).reshape(3, 3), behind if r[10] else 0,
-                      len(r) > 26 and bool(r[26])) for r in e["repairs"]]
+                      len(r) > 26 and bool(r[26]), r[27] if len(r) > 27 else 0) for r in e["repairs"]]
     return out
 
 

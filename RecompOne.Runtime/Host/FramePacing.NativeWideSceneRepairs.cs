@@ -12,9 +12,12 @@ public static partial class FramePacing
     // cliff, doorway or hole, so extending every mesh boundary would be wrong.
     // Boundary repairs keep their true depth even where the scene would
     // otherwise draw its additions behind all real scenery. Culled repairs
-    // are back-face culled like the scenery (others show both sides).
+    // are back-face culled like the scenery (others show both sides). Ranked
+    // fills behind the scenery are layered by rank (lower in front), so
+    // coplanar fills of different meshes never fight.
     readonly record struct NativeWideRepair(int Polygon, NativeWideClipVertex A,
-        NativeWideClipVertex B, NativeWideClipVertex C, bool Boundary = false, bool Culled = false);
+        NativeWideClipVertex B, NativeWideClipVertex C, bool Boundary = false, bool Culled = false,
+        float Rank = 0);
     readonly record struct NativeWideEdge(Vector3 A, Vector3 B);
     readonly record struct NativeWideEdgeOwner(int Polygon, int Edge, int Count);
     readonly record struct NativeWideSceneryKey(uint Level, uint X, uint Y, uint Z, int Polygons, int Vertices);
@@ -1255,11 +1258,12 @@ public static partial class FramePacing
     // inside an open room. Draw it behind all real scenery so it only fills
     // pixels nothing else covers. Depth is 1 - 64/Z; the remap keeps the
     // additions' own order but places them beyond the loaded rooms.
-    static void NativeWideBehindScenery(List<NativeWideTriangle> triangles, int start)
+    // <paramref name="back"/> pushes ranked fills further back still.
+    static void NativeWideBehindScenery(List<NativeWideTriangle> triangles, int start, float back = 0)
     {
-        static HleVertex Far(HleVertex v)
+        HleVertex Far(HleVertex v)
         {
-            v.Z = Math.Min(40000f + v.Z * 0.3f, 65000f);
+            v.Z = Math.Min(40000f + v.Z * 0.3f + back, 65000f);
             return v;
         }
         for (int i = start; i < triangles.Count; i++)
@@ -1268,6 +1272,18 @@ public static partial class FramePacing
             triangles[i] = t with { A = Far(t.A), B = Far(t.B), C = Far(t.C) };
         }
     }
+
+    // Depth between ranks (a rank is one wall cell) and between the meshes
+    // of one frame at equal rank: several 24-bit depth steps at the far
+    // remap's depths, more than coplanar faces' rounding apart.
+    const float NativeWideRankDepth = 256, NativeWideRankMeshDepth = 16, NativeWideRankMax = 40;
+
+    static float NativeWideRankBack(NativeWideRepair repair, int tie) => repair.Rank <= 0 ? 0
+        : Math.Min(repair.Rank, NativeWideRankMax) * NativeWideRankDepth + Math.Min(tie, 15) * NativeWideRankMeshDepth;
+
+    // A fixed order of meshes, the same whichever zone draws them: by origin.
+    static long NativeWideMeshOrder(IMemory m, NativeWideWorld world) =>
+        ((long)(int)m.ReadU32(world.Header) << 32) | m.ReadU32(world.Header + 4);
 
     // From edge a-b of triangle abc away from c, perpendicular to the edge.
     static Vector3 NativeWideOutward(NativeWideClipVertex a, NativeWideClipVertex b, NativeWideClipVertex c)
