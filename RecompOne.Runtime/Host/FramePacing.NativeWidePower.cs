@@ -41,6 +41,7 @@ public static partial class FramePacing
         bool Outdoor(NativeWideClipVertex[] t) =>
             roof || front && Math.Min(t[0].Z, Math.Min(t[1].Z, t[2].Z)) + origin.Z >= NativeWidePowerFrontZ;
         var faces = NativeWideFacesOf(m, world);
+        float meshEndZ = faces.Where(f => f.Valid).SelectMany(f => f.T).Select(v => v.Z).DefaultIfEmpty().Max();
         var walls = new List<(int Polygon, NativeWideClipVertex[] T)>();
         for (int pi = 0; pi < faces.Length; pi++)
             if (faces[pi].Valid && !faces[pi].SemiTrans && NativeWidePowerWall(faces[pi].T)) walls.Add((pi, faces[pi].T));
@@ -140,6 +141,10 @@ public static partial class FramePacing
                 if (outward.Length() < 1) continue;
                 outward = Vector3.Normalize(outward);
                 if (!Outdoor(t) && outward.Z < 0.3f) continue;
+                // A wall ending where its mesh ends goes on in the next mesh (the
+                // next room): continued, it ran on through that room's own walls
+                // and slid over their fills as the camera moved (#135, 2b into 4a).
+                if (!Outdoor(t) && Math.Max(a.Z, b.Z) >= meshEndZ - 8) continue;
                 var beyond = (Position(a) + Position(b)) / 2 + outward * 40;
                 if (surface.Overlaps([a, b, a with { X = beyond.X, Y = beyond.Y, Z = beyond.Z }])) continue;
                 AddNativeWideSceneryStrip(repairs, pi, a, b, c, new(a.U, a.V), new(b.U, b.V), new(c.U, c.V),
@@ -167,10 +172,15 @@ public static partial class FramePacing
         // At the second split the right branch's pipe room (b0, from X 13100)
         // has only pipes on its left, and the view passed through the backs of
         // the left branch's wall onto its toxic pool (#135). A screen of wall
-        // plates (polygon 244) at X 12800, below the block that stands
-        // between the branches at the fork.
+        // plates (polygon 244) at X 12600, below the block that stands
+        // between the branches at the fork, and higher beside the next room
+        // (b1), where the left branch's raised walls showed until the camera
+        // left b0.
         if (mesh is (1779, 1553, 13282, 73868))
-            NativeWidePowerScreen(faces, origin, 244, 12800, 1600, 4000, 70900, 74100, repairs);
+        {
+            NativeWidePowerScreen(faces, origin, 244, 12600, 1600, 4000, 70900, 74100, repairs);
+            NativeWidePowerScreen(faces, origin, 244, 12600, 1600, 5600, 64100, 70900, repairs);
+        }
         // The gem path's second room (1m) is the right branch's (0b) twin,
         // 2000 to its left, and looked between their walls at 0b's pool; 0b's
         // wall backs belong to a mesh 1m does not draw. A screen in the empty

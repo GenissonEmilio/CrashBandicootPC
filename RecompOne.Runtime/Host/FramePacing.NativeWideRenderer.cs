@@ -465,8 +465,10 @@ public static partial class FramePacing
         {
             var world = worlds[wi];
             bool behind = NativeWideRepairsBehind(m, world);
-            // Repairs were tuned with each mesh's own zone; neighbours draw only authored polygons.
-            var repairs = world.Neighbor ? Array.Empty<NativeWideRepair>() : NativeWideSceneRepairs(m, world);
+            // Repairs were tuned with each mesh's own zone; neighbours draw only authored polygons,
+            // except in levels whose repairs suit every camera drawing the mesh.
+            var repairs = world.Neighbor && !NativeWideNeighborRepairs(m)
+                ? Array.Empty<NativeWideRepair>() : NativeWideSceneRepairs(m, world);
             foreach (var chunk in NativeWideRepairChunksOf(repairs))
             {
                 if (!NativeWideBoxTouchesSides(chunk.Min, chunk.Max, world, matrix, near, projection, screenX, screenY,
@@ -1433,6 +1435,11 @@ public static partial class FramePacing
     // and Koala Kong skirts.
     static bool NativeWideRepairsBehind(IMemory m, NativeWideWorld world) =>
         world.PolyCount > 0 && (NativeWideSunsetTemple(m, world) || m.ReadU32(Catalog.LevelIdAddr) is 3 or 6 or 12 or 15 or 19 or 33 or 41);
+
+    // Cortex Power's corridors run side by side, each path's walls hiding the
+    // other: drawn only from their own zone, they came and went as the camera
+    // crossed into the next zone (#135). Its neighbours' repairs are drawn too.
+    static bool NativeWideNeighborRepairs(IMemory m) => m.ReadU32(Catalog.LevelIdAddr) is 3;
 
     // Fills behind all scenery must not hide the sky: in The Lab, back wall
     // continuations run past the side walls' windows; in Cortex Power, the

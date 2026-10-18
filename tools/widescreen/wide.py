@@ -77,11 +77,16 @@ def load_repairs(path):
     return out
 
 
+# Levels whose neighbour meshes draw their repairs too (NativeWideNeighborRepairs).
+NEIGHBOR_REPAIRS = {3}
+
+
 def own_repairs(L, zone, repairs):
-    """The runtime draws repairs only for the camera zone's own meshes, not for neighbours."""
+    """The runtime draws repairs only for the camera zone's own meshes, not for neighbours
+    (except in NEIGHBOR_REPAIRS levels, where every drawn mesh has them)."""
     if not repairs:
         return None
-    own = set(L.zone(zone).worlds)
+    own = {m.name for m in L.zone_meshes(zone)} if L.id in NEIGHBOR_REPAIRS else set(L.zone(zone).worlds)
     return {k: v for k, v in repairs.items() if k in own}
 
 
