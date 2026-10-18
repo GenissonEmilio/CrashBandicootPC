@@ -119,6 +119,9 @@ def check(L, zone, pidx):
 
 
 def retail_polys(L, zone, pidx, k):
+    """None when the path names no SLST entry on the disc (e.g. Whole Hog's one-point s0_uZ)."""
+    if L.zones[zone].paths[pidx].slst not in {eidstr(e) for e in L.entries}:
+        return None
     res = {}
     for v in lists(L, zone, pidx)[k]:
         res.setdefault((v >> 12) & 7, set()).add(v & 0xFFF)
@@ -146,7 +149,10 @@ def render_core(L, cam, zone, pidx, k, xrange=None):
     ms = L.zone_meshes(z)
     nown = len(z.worlds)
     rp = retail_polys(L, z.name, pidx, k)
-    keep = [m.subset(np.isin(np.arange(m.polys), sorted(rp.get(wi, ())))) for wi, m in enumerate(ms[:nown])]
+    if rp is None:
+        keep = [m.subset(np.ones(m.polys, bool)) for m in ms[:nown]]
+    else:
+        keep = [m.subset(np.isin(np.arange(m.polys), sorted(rp.get(wi, ())))) for wi, m in enumerate(ms[:nown])]
     fr = raster.render(cam, keep, xrange=xrange)
     for li, m in enumerate(keep):
         sel = fr.layer == li

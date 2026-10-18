@@ -1452,10 +1452,10 @@ public static partial class FramePacing
     // behind all real scenery and only cover what nothing else does. So do
     // The Lab's wall continuations (its towers are boundary repairs and keep
     // their true depth), and Cortex Power's wall ends (its raised wall tops
-    // are boundary repairs), and the Jungle Rollers, Upstream, Boulder Dash
-    // and Koala Kong skirts.
+    // are boundary repairs), and the Jungle Rollers, Upstream, Boulder Dash,
+    // Whole Hog and Koala Kong skirts.
     static bool NativeWideRepairsBehind(IMemory m, NativeWideWorld world) =>
-        world.PolyCount > 0 && (NativeWideSunsetTemple(m, world) || m.ReadU32(Catalog.LevelIdAddr) is 3 or 6 or 9 or 12 or 15 or 19 or 33 or 41);
+        world.PolyCount > 0 && (NativeWideSunsetTemple(m, world) || m.ReadU32(Catalog.LevelIdAddr) is 3 or 6 or 9 or 12 or 15 or 19 or 30 or 33 or 41);
 
     // Cortex Power's corridors run side by side, each path's walls hiding the
     // other: drawn only from their own zone, they came and went as the camera
