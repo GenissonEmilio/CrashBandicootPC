@@ -37,6 +37,32 @@ Requirements: Python 3 with numpy, scipy, Pillow; .NET 10 SDK for the two C# too
    whose UVs leave its texture tile (garbage texels) or a wrong-looking fill shows
    offline; animated textures use frame 0.
 
+   **`--retail` (view, tview, scan): the 4:3 core as the game draws it.** By default
+   the core shows every polygon of the zone's meshes. The real game draws only the
+   polygons on the precomputed SLST list of the current camera-path point (the
+   level's own visibility lists), and the native-wide renderer then fills what is
+   still empty with the neighbour meshes (#105 WorldCore core fill). With `--retail`
+   the core is drawn that way, so it matches a game screenshot taken at that camera:
+
+       wide.py tview 29 a2_tZ:0:15 --retail       # Jaws of Darkness: core like the game frame
+       wide.py view  29 log:<probe run>:195 --retail
+       wide.py scan  29 --retail --out artifacts/issue138/scan_retail
+
+   A `zone:path:k` camera uses that point's list; any other camera (`x,y,z,...`,
+   `log:`) uses the zone's path point nearest the camera (the game follows Crash's
+   progress along the path, so check the printed point when the camera is between
+   paths). The side bands are unchanged (the runtime draws every mesh there). In
+   `scan`, `--retail` changes the 4:3 edge columns that decide whether a band void
+   counts as "beside scenery", and the hotspot pictures. Use it when an offline
+   picture shows scenery in the centre that the game does not (or the other way
+   round); keep the default to see every polygon a repair could copy from.
+
+   The decoder (`wslib/slst.py`, port of wurlyfox c1 `slst.c` SlstDecodeForward)
+   rebuilds each point's list from the first full list and the per-point deltas.
+   `wide.py slst <level>...` checks it: for every camera path the list decoded to the
+   last point must equal the full list the entry stores there. Exact on levels 3, 6,
+   9, 29 and 41 (296 paths).
+
 3. **Write the repair in C#** (`RecompOne.Runtime/Host/FramePacing.NativeWide*.cs`).
    Building blocks: `NativeWideCopy` (box copies, mirrors, `Complete`), `NativeWideGrid`,
    `NativeWideTerrain`, `NativeWideSymmetry`, `NativeWideRows` (rows of wall cells
@@ -77,6 +103,10 @@ Requirements: Python 3 with numpy, scipy, Pillow; .NET 10 SDK for the two C# too
 
 - Camera matrix from a path point: pitch = rot[0], yaw = rot[1] (4096 = full turn),
   screen Y scaled by 0.625; matches the GTE matrix the probe logs.
+- SLST entries (one per camera path): item 0 = full sorted poly-id list of point 0,
+  items 1..n-1 = deltas (removals, additions, then depth-order swaps), item n = full
+  list of the last point. Poly id: bits 0-11 polygon, 12-14 world (index into the
+  zone's worlds), 15 flag.
 - Backdrops (sky) are camera-centred and write no depth in game: anything drawn in
   the side pass covers them, which the offline renderer models.
 - Meshes overlap at zone boundaries and can hold the same parts: a repair copied in

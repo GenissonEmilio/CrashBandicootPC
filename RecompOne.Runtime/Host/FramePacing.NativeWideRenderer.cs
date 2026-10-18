@@ -1129,7 +1129,12 @@ public static partial class FramePacing
         int shift = _nativeWideShader == NativeWideShader.FogTint ? _nativeWideFogShift : world.FogShift;
         if (_nativeWideShader is NativeWideShader.Fog or NativeWideShader.FogTint && sz > far)
         {
-            int amount = (short)((sz - far) << shift);
+            // The game loads this into the 16-bit IR0, so past (far + 0x8000 >> shift)
+            // the value wraps negative and the colour turns bright again. Retail
+            // never draws that far (Jaws of Darkness: deepest listed poly ~9600), but
+            // the 16:9 pass does: far neighbour meshes showed as lit fragments that
+            // went dark as the camera came closer (#138). Saturate instead.
+            int amount = (int)Math.Min((long)(sz - far) << shift, 0x7FFF);
             r = NativeWideDepthCue(r, _nativeWideFarColor[0], amount);
             g = NativeWideDepthCue(g, _nativeWideFarColor[1], amount);
             b = NativeWideDepthCue(b, _nativeWideFarColor[2], amount);

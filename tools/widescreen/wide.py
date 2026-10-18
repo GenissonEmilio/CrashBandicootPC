@@ -3,8 +3,10 @@
 
   wide.py levels
   wide.py info  <level> [zone]
-  wide.py scan  <level> [--step 4] [--zones a0,a1] [--repairs R.json [--check]] [--out DIR]
-  wide.py view  <level> <where> [--repairs R.json] [--out P.png] [--meshes a,b --box ... --nocull]
+  wide.py scan  <level> [--step 4] [--zones a0,a1] [--repairs R.json [--check]] [--out DIR] [--retail]
+  wide.py view  <level> <where> [--repairs R.json] [--out P.png] [--retail] [--meshes a,b --box ... --nocull]
+  wide.py tview <level> <where> [--repairs R.json] [--out P.png] [--only] [--retail]
+  wide.py slst  <level>...                (check the retail SLST decoder on every camera path)
   wide.py grid  <level> <mesh[,mesh]> <X|Y|Z>=<value> [--box x0,y0,z0,x1,y1,z1] [--at <where>]
   wide.py faces <level> <mesh[,mesh]> x0,y0,z0,x1,y1,z1 [--slant]
   wide.py poly  <level> <mesh> <poly>...
@@ -15,6 +17,8 @@
 
 <level>: id (41) or slug (the-lab). <where>: zone:path:k (a0:0:12), or
 [@]x,y,z,pitch,yaw (path units; yaw 0 looks -Z, -1024 looks +X), or log:<probe run dir>:<render> (exact logged camera).
+--retail: the 4:3 core shows only what the game draws there (the path point's SLST list plus the
+neighbour meshes under it) instead of every polygon; other cameras use the nearest path point.
 """
 import argparse
 import collections
@@ -27,7 +31,7 @@ import time
 import numpy as np
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from wslib import analyze, draw, grid, raster  # noqa: E402
+from wslib import analyze, draw, grid, raster, slst  # noqa: E402
 from wslib.level import Camera, Level, catalog  # noqa: E402
 
 
@@ -55,6 +59,17 @@ def where(L, spec):
     x, y, z, a, b = map(float, spec.split(","))
     best = min(L.zones.values(), key=lambda zn: _zone_distance(zn, (x, y, z)))
     return Camera((x, y, z), a, b), best.name
+
+
+def retail_point(L, spec, cam, zone):
+    """(path, k) whose SLST list the game draws for this view: the given path point, or the
+    zone's path point nearest the camera."""
+    spec = spec.lstrip("@")
+    parts = spec.split(":")
+    if len(parts) == 3 and not spec.startswith("log:"):
+        p = L.path(":".join(parts[:2]))
+        return p.index, min(int(parts[2]), len(p) - 1)
+    return slst.nearest_point(L, zone, cam)
 
 
 def _zone_distance(z, p):
@@ -147,15 +162,23 @@ def cmd_info(a):
               f"box=({lo.tolist()})..({hi.tolist()}) tpages={m.tpages}")
 
 
-def _save_view(L, cam, zone, repairs, out, centre=True, notes=()):
+def _save_view(L, cam, zone, repairs, out, centre=True, notes=(), retail=None):
+    """retail: (path, k) to draw the 4:3 core like the game (SLST list + neighbour fill)."""
     ms = L.zone_meshes(zone)
     repairs = own_repairs(L, zone, repairs)
     fr = raster.render(cam, ms, repairs) if centre else raster.render_bands(cam, ms, repairs)
+    core = slst.render_core(L, cam, zone, *retail) if retail and centre else None
+    if core is not None:
+        slst.compose(fr, core)
     rep = analyze.describe(L, fr, ms)
     img = draw.shaded(fr)
     notes = [f"{L.name} {zone} {cam}", *notes]
+    if core is not None:
+        notes.append(f"core: retail SLST list of path {retail[0]} point {retail[1]} + neighbour fill")
     if repairs:
         base = raster.render(cam, ms) if centre else raster.render_bands(cam, ms)
+        if core is not None:
+            slst.compose(base, core)
         filled, fight, cover, mask = repair_effect(base, fr)
         img[mask] = (255, 40, 0)
         notes.append(f"repairs fill {filled} px, z-fight {fight} px (red), cover {cover} px")
@@ -186,9 +209,12 @@ def cmd_view(a):
         print(out)
         return
     out = a.out or f"view_{L.id}_{a.where.replace(':', '_').replace(',', '_')}.png"
-    fr, rep = _save_view(L, cam, zone, load_repairs(a.repairs), out)
+    retail = retail_point(L, a.where, cam, zone) if a.retail else None
+    fr, rep = _save_view(L, cam, zone, load_repairs(a.repairs), out, retail=retail)
     vl, vr, vc = fr.void_counts()
     print(f"{cam} zone {zone} meshes {[m.name for m in L.zone_meshes(zone)]}")
+    if retail:
+        print(f"core: retail SLST list of {zone}:{retail[0]}:{retail[1]} + neighbour fill")
     print(f"void L={vl} R={vr} centre={vc} -> {out}")
     if rep and "effect" in rep[0]:
         print("repairs fill %d px, z-fight %d px (must be 0), cover %d px from in front" % rep[0]["effect"])
@@ -215,6 +241,10 @@ def cmd_scan(a):
             for k in ks:
                 cam = p.camera(k)
                 fr = raster.render_bands(cam, ms, own)
+                if a.retail:
+                    # The 4:3 edge columns as the game draws them decide which band voids count.
+                    for c in (fr.cx - raster.CORE, fr.cx + raster.CORE - 1):
+                        slst.compose(fr, slst.render_core(L, cam, zn, p.index, k, (c, c + 1)), slice(c, c + 1))
                 vl, vr, _ = fr.void_counts()
                 sus = fr.suspicious()
                 e = dict(zone=zn, path=p.index, k=k, cam=[int(v) for v in cam.pos],
@@ -244,7 +274,8 @@ def cmd_scan(a):
     lines = [f"# {L.name} (level {L.id}) native 16:9 void scan", "",
              f"{len(points)} camera points, step {a.step}, {len(spots)} hotspots (>= {a.min} band void px at 1x 684x216"
              " in rows where the 4:3 edge shows scenery; voids continuing a centre pit don't count).",
-             f"Repairs: {a.repairs or 'none (retail meshes only)'}", ""]
+             f"Repairs: {a.repairs or 'none (retail meshes only)'}",
+             f"4:3 core: {'retail SLST lists + neighbour fill (--retail)' if a.retail else 'every polygon'}", ""]
     if a.check and a.repairs:
         lines += [f"Repairs win over retail pixels at nearly equal depth (z-fight) at {len(fights)} points (must be 0):", ""]
         lines += [f"- {e['zone']}:{e['path']}:{e['k']} z-fight {e['fight']} cover {e['cover']} filled {e['filled']}"
@@ -258,7 +289,8 @@ def cmd_scan(a):
         cam = L.path(f"{worst['zone']}:{worst['path']}").camera(worst["k"])
         img = os.path.join(out, f"spot{i:02d}_{where_.replace(':', '_')}.png")
         fr, rep = _save_view(L, cam, worst["zone"], repairs, img,
-                             notes=[f"spot {i}: k {s[0]['k']}..{s[-1]['k']}"])
+                             notes=[f"spot {i}: k {s[0]['k']}..{s[-1]['k']}"],
+                             retail=(worst["path"], worst["k"]) if a.retail else None)
         lines += [f"## spot {i}: {worst['zone']} path {worst['path']} k {s[0]['k']}..{s[-1]['k']} "
                   f"(worst k {worst['k']}: void L={worst['L']} R={worst['R']}, beside scenery L={worst['SL']} R={worst['SR']})",
                   f"camera {cam.pos.astype(int).tolist()} pitch {cam.pitch} yaw {cam.yaw}; "
@@ -508,10 +540,21 @@ def cmd_tview(a):
     ms = L.zone_meshes(zone)
     reps = own_repairs(L, zone, load_repairs(a.repairs)) if a.repairs else None
     uvs = texture.load_repair_uvs(a.repairs) if a.repairs else None
-    imgs = [texture.textured(raster.render(cam, ms, reps), L.id, uvs)]
+    core = None
+    if a.retail:
+        retail = retail_point(L, a.where, cam, zone)
+        core = slst.render_core(L, cam, zone, *retail)
+        print(f"core: retail SLST list of {zone}:{retail[0]}:{retail[1]} + neighbour fill")
+    fr = raster.render(cam, ms, reps)
+    if core is not None:
+        slst.compose(fr, core)
+    imgs = [texture.textured(fr, L.id, uvs)]
     if reps:
         # The game draws repairs only in the 16:9 side bands.
-        base = texture.textured(raster.render(cam, ms), L.id)
+        base = raster.render(cam, ms)
+        if core is not None:
+            slst.compose(base, core)
+        base = texture.textured(base, L.id)
         core = slice(raster.CX - raster.CORE, raster.CX + raster.CORE)
         imgs[0][:, core] = base[:, core]
         if not a.only:
@@ -525,6 +568,22 @@ def cmd_tview(a):
     print(f"{cam} zone {zone} -> {path}")
 
 
+def cmd_slst(a):
+    """Decoder check: for every camera path the list decoded forward to the last point must
+    equal the full list the SLST entry stores for it."""
+    for lv in a.levels:
+        L = level_arg(lv)
+        ok, bad = 0, []
+        for zn in sorted(L.zones):
+            for p in L.zones[zn].paths:
+                r, got, want = slst.check(L, zn, p.index)
+                if r:
+                    ok += 1
+                else:
+                    bad.append(f"{zn}:{p.index} decoded {got} stored {want}")
+        print(f"{L.id:3d} {L.name}: {ok} paths ok, {len(bad)} bad" + "".join(f"\n    {b}" for b in bad))
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = ap.add_subparsers(dest="cmd", required=True)
@@ -533,12 +592,16 @@ def main():
     s = sub.add_parser("view"); s.add_argument("level"); s.add_argument("where")
     s.add_argument("--repairs"); s.add_argument("--out")
     s.add_argument("--meshes"); s.add_argument("--box"); s.add_argument("--nocull", action="store_true")
+    s.add_argument("--retail", action="store_true", help="4:3 core as the game draws it (SLST list + neighbour fill)")
     s = sub.add_parser("tview"); s.add_argument("level"); s.add_argument("where")
     s.add_argument("--repairs"); s.add_argument("--out"); s.add_argument("--only", action="store_true")
+    s.add_argument("--retail", action="store_true", help="4:3 core as the game draws it (SLST list + neighbour fill)")
     s = sub.add_parser("scan"); s.add_argument("level"); s.add_argument("--step", type=int, default=4)
     s.add_argument("--zones"); s.add_argument("--repairs"); s.add_argument("--out")
     s.add_argument("--min", type=int, default=120); s.add_argument("-v", "--verbose", action="store_true")
     s.add_argument("--check", action="store_true", help="with --repairs: also count retail pixels repairs cover")
+    s.add_argument("--retail", action="store_true", help="4:3 edge columns and spot pictures as the game draws them")
+    s = sub.add_parser("slst"); s.add_argument("levels", nargs="+")
     s = sub.add_parser("grid"); s.add_argument("level"); s.add_argument("meshes"); s.add_argument("plane")
     s.add_argument("--box"); s.add_argument("--at"); s.add_argument("--extend", type=int, default=0)
     s = sub.add_parser("faces"); s.add_argument("level"); s.add_argument("meshes"); s.add_argument("box")
