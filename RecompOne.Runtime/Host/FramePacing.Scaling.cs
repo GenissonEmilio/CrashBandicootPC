@@ -1160,7 +1160,11 @@ public static partial class FramePacing
                 for (int i = 0; i < HogMemCount; i++)
                     _hogMem[i] = (int)m.ReadU32(obj + ObjMemOff + (uint)i * 4u);
             }
-            else
+            // Only Crash off the hog clears the carry. Every entity snapshot
+            // before Crash used to wipe it, so each present kept trunc(dt) of
+            // pathprog: the hog ran 3% slow at 60, 12% at 240, and reached the
+            // 30 Hz rotisseries late enough to close the jump window (#140).
+            else if (_crashObj)
             {
                 _hogPathFrac = 0;
                 _hogTrotFracX = 0;
