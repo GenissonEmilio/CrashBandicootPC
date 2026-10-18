@@ -15,6 +15,10 @@ public static partial class FramePacing
     // toward the camera then continue in their own plane, behind all real
     // scenery, so they only fill what nothing else covers. The building front
     // of the opening camera (an outdoor scene) only continues sideways.
+    // The building front's mesh also holds the first corridor inside (#135:
+    // its hazard-striped door posts, continued sideways, striped the pit
+    // under the pipes); only faces out from the front (absolute Z) count.
+    const float NativeWidePowerFrontZ = 128800;
     const float NativeWidePowerRise = 1600;
     const float NativeWidePowerReach = 1600;
     // Wall tops below this (absolute Y) are kerbs and pool edges, not walls.
@@ -22,6 +26,8 @@ public static partial class FramePacing
     const float NativeWidePowerSetBack = 48;
     // How far behind a wall's plane the wall above a ledge may stand.
     const float NativeWidePowerStep = 96;
+    // Screens between the paths stand in the dark, away from the lights.
+    const float NativeWidePowerScreenShade = 40;
 
     static List<NativeWideRepair> NativeWidePowerRepairs(IMemory m, NativeWideWorld world)
     {
@@ -30,8 +36,10 @@ public static partial class FramePacing
         var origin = new Vector3((int)m.ReadU32(world.Header), (int)m.ReadU32(world.Header + 4),
             (int)m.ReadU32(world.Header + 8));
         // The opening scene's building front and the entrance below it.
-        bool outdoor = (world.PolyCount, world.VertexCount, (int)origin.X, (int)origin.Z) is
-            (531, 590, 7665, 124324) or (1605, 1585, 14600, 131598);
+        var mesh = (world.PolyCount, world.VertexCount, (int)origin.X, (int)origin.Z);
+        bool roof = mesh is (531, 590, 7665, 124324), front = mesh is (1605, 1585, 14600, 131598);
+        bool Outdoor(NativeWideClipVertex[] t) =>
+            roof || front && Math.Min(t[0].Z, Math.Min(t[1].Z, t[2].Z)) + origin.Z >= NativeWidePowerFrontZ;
         var faces = NativeWideFacesOf(m, world);
         var walls = new List<(int Polygon, NativeWideClipVertex[] T)>();
         for (int pi = 0; pi < faces.Length; pi++)
@@ -52,9 +60,10 @@ public static partial class FramePacing
                 Vector3 dp = Position(p) - Position(right), dq = Position(q) - Position(right);
                 if (edges[NativeWidePowerKey(p, q)] != 1
                     || Math.Abs(Vector3.Dot(dp, dq)) > 0.1f * dp.Length() * dq.Length()) continue;
+                var uv = NativeWidePowerCornerUv(right, p, q);
                 var corner = new NativeWideClipVertex(p.X + q.X - right.X, p.Y + q.Y - right.Y, p.Z + q.Z - right.Z,
                     Math.Clamp(p.R + q.R - right.R, 0, 255), Math.Clamp(p.G + q.G - right.G, 0, 255),
-                    Math.Clamp(p.B + q.B - right.B, 0, 255), p.U + q.U - right.U, p.V + q.V - right.V);
+                    Math.Clamp(p.B + q.B - right.B, 0, 255), uv.X, uv.Y);
                 // A neighbouring mesh can hold the whole cell: the completion
                 // stands a sub-pixel distance behind the wall so that one wins.
                 var back = Vector3.Cross(Position(p) - Position(q), Position(corner) - Position(q));
@@ -72,38 +81,45 @@ public static partial class FramePacing
         }
         int halves = repairs.Count;
         if (halves > 0) edges = NativeWidePowerEdges(faces.Select(f => f.T).Concat(walls.Skip(originals).Select(w => w.T)));
-        if (!outdoor)
-        {
-            var strip = new List<NativeWideRepair>();
-            foreach (var (pi, t) in walls)
-                for (int ei = 0; ei < 3; ei++)
-                {
-                    var a = t[ei]; var b = t[(ei + 1) % 3]; var c = t[(ei + 2) % 3];
-                    var e = Position(b) - Position(a);
-                    if (edges[NativeWidePowerKey(a, b)] != 1 || e.Length() < 200 || Math.Abs(e.Y) > e.Length() * 0.1f
-                        || c.Y >= Math.Min(a.Y, b.Y) - 1 || Math.Min(a.Y, b.Y) + origin.Y < NativeWidePowerWallTop) continue;
-                    // Faces wind with their normal pointing out of the corridor.
-                    // The rise stands that far behind the wall's plane and starts
-                    // below its top, so where the wall goes on (above a step, or
-                    // in a neighbouring mesh holding the same wall) the original
-                    // stays in front, and no gap opens along the top.
-                    var behind = Vector3.Cross(e, Position(c) - Position(a));
-                    behind.Y = 0;
-                    if (behind.Length() < 1) continue;
-                    behind = Vector3.Normalize(behind) * NativeWidePowerSetBack - Vector3.UnitY * 2 * NativeWidePowerSetBack;
-                    NativeWideClipVertex Back(NativeWideClipVertex v) =>
-                        v with { X = v.X + behind.X, Y = v.Y + behind.Y, Z = v.Z + behind.Z };
-                    strip.Clear();
-                    AddNativeWideSceneryStrip(strip, pi, Back(a), Back(b), Back(c), new(a.U, a.V), new(b.U, b.V),
-                        new(c.U, c.V), Vector3.UnitY, distance: NativeWidePowerRise + 2 * NativeWidePowerSetBack);
-                    // Walls stepping back above a ledge go on behind it: the rise
-                    // would cut through them.
-                    float top = Math.Min(a.Y, b.Y) - 8;
-                    foreach (var r in strip)
-                        if (!surface.Overlaps([r.A, r.B, r.C], NativeWidePowerStep, top)) repairs.Add(r);
-                }
-            for (int i = 0; i < repairs.Count; i++) repairs[i] = repairs[i] with { Boundary = true };
-        }
+        // Some walls end in a sloping ledge, whose top edge is the wall's top
+        // (#135: the gem path's right wall, which the view crossed just above
+        // into the right path's toxic room).
+        // Only ledges standing on a wall count: pipes are sloping faces too.
+        var wallEdges = new HashSet<NativeWideEdge>(walls.SelectMany(w =>
+            Enumerable.Range(0, 3).Select(ei => NativeWidePowerKey(w.T[ei], w.T[(ei + 1) % 3]))));
+        var ledges = Enumerable.Range(0, faces.Length)
+            .Where(pi => faces[pi].Valid && !faces[pi].SemiTrans && NativeWidePowerLedge(faces[pi].T)
+                && Enumerable.Range(0, 3).Any(ei => wallEdges.Contains(NativeWidePowerKey(faces[pi].T[ei], faces[pi].T[(ei + 1) % 3]))))
+            .Select(pi => (Polygon: pi, faces[pi].T));
+        var strip = new List<NativeWideRepair>();
+        foreach (var (pi, t) in walls.Concat(ledges).Where(w => !Outdoor(w.T)))
+            for (int ei = 0; ei < 3; ei++)
+            {
+                var a = t[ei]; var b = t[(ei + 1) % 3]; var c = t[(ei + 2) % 3];
+                var e = Position(b) - Position(a);
+                if (edges[NativeWidePowerKey(a, b)] != 1 || e.Length() < 200 || Math.Abs(e.Y) > e.Length() * 0.1f
+                    || c.Y >= Math.Min(a.Y, b.Y) - 1 || Math.Min(a.Y, b.Y) + origin.Y < NativeWidePowerWallTop) continue;
+                // Faces wind with their normal pointing out of the corridor.
+                // The rise stands that far behind the wall's plane and starts
+                // below its top, so where the wall goes on (above a step, or
+                // in a neighbouring mesh holding the same wall) the original
+                // stays in front, and no gap opens along the top.
+                var behind = Vector3.Cross(e, Position(c) - Position(a));
+                behind.Y = 0;
+                if (behind.Length() < 1) continue;
+                behind = Vector3.Normalize(behind) * NativeWidePowerSetBack - Vector3.UnitY * 2 * NativeWidePowerSetBack;
+                NativeWideClipVertex Back(NativeWideClipVertex v) =>
+                    v with { X = v.X + behind.X, Y = v.Y + behind.Y, Z = v.Z + behind.Z };
+                strip.Clear();
+                AddNativeWideSceneryStrip(strip, pi, Back(a), Back(b), Back(c), new(a.U, a.V), new(b.U, b.V),
+                    new(c.U, c.V), Vector3.UnitY, distance: NativeWidePowerRise + 2 * NativeWidePowerSetBack);
+                // Walls stepping back above a ledge go on behind it: the rise
+                // would cut through them.
+                float top = Math.Min(a.Y, b.Y) - 8;
+                foreach (var r in strip)
+                    if (!surface.Overlaps([r.A, r.B, r.C], NativeWidePowerStep, top)) repairs.Add(r);
+            }
+        for (int i = 0; i < repairs.Count; i++) repairs[i] = repairs[i] with { Boundary = true };
         // Wall ends toward the camera, the raised tops' included, so the
         // raised wall continues there too.
         int raised = repairs.Count;
@@ -123,20 +139,54 @@ public static partial class FramePacing
                 outward.Y = 0;
                 if (outward.Length() < 1) continue;
                 outward = Vector3.Normalize(outward);
-                if (!outdoor && outward.Z < 0.3f) continue;
+                if (!Outdoor(t) && outward.Z < 0.3f) continue;
                 var beyond = (Position(a) + Position(b)) / 2 + outward * 40;
                 if (surface.Overlaps([a, b, a with { X = beyond.X, Y = beyond.Y, Z = beyond.Z }])) continue;
                 AddNativeWideSceneryStrip(repairs, pi, a, b, c, new(a.U, a.V), new(b.U, b.V), new(c.U, c.V),
                     outward, distance: NativeWidePowerReach);
             }
+        // The side pass culls back faces, and the bands look at the paths'
+        // walls from behind where the paths run side by side (#135: the
+        // right branch's toxic pools seen through the gem path's and pipe
+        // room's sides). Every wall gets a back: the same triangle wound the
+        // other way, culled, so it only shows where the wall itself does not.
+        foreach (var (pi, t) in walls.Where(w => !Outdoor(w.T)))
+            repairs.Add(new(pi, t[0], t[2], t[1], Boundary: true, Culled: true));
         // After the first split, the left path's Tesla room (X 4400-6640) has
         // sloping machinery on its right instead of a wall, and the 16:9 view
         // looks over it at the right path's corridor (X 9180-11700). A dark
         // screen in the empty space between them hides each path from the
-        // other: copies of the room's dark wall cell (polygon 1638), mirrored
-        // cell to cell, in the absolute plane X 8400.
-        if ((world.PolyCount, world.VertexCount, (int)origin.X, (int)origin.Z) is (2222, 2127, 7815, 104809))
-            NativeWidePowerScreen(faces, origin, 1638, 8400, 3600, 7200, 99600, 104400, repairs);
+        // other: copies of a riveted wall plate (polygon 1424), mirrored cell
+        // to cell and shaded dark, in the absolute plane X 8400 (#135: the
+        // first screen used a hazard-striped cell, striped zigzags in the
+        // bands). It goes on through the block between the two corridors at
+        // the split and stands on its flat roof (Y 6200), which the right
+        // corridor's camera looked over at the left room's Tesla coils.
+        if (mesh is (2222, 2127, 7815, 104809))
+            NativeWidePowerScreen(faces, origin, 1424, 8400, 3600, 7600, 99600, 107200, repairs);
+        // At the second split the right branch's pipe room (b0, from X 13100)
+        // has only pipes on its left, and the view passed through the backs of
+        // the left branch's wall onto its toxic pool (#135). A screen of wall
+        // plates (polygon 244) at X 12800, below the block that stands
+        // between the branches at the fork.
+        if (mesh is (1779, 1553, 13282, 73868))
+            NativeWidePowerScreen(faces, origin, 244, 12800, 1600, 4000, 70900, 74100, repairs);
+        // The gem path's second room (1m) is the right branch's (0b) twin,
+        // 2000 to its left, and looked between their walls at 0b's pool; 0b's
+        // wall backs belong to a mesh 1m does not draw. A screen in the empty
+        // strip between them (X 7900) from the mesh both rooms draw.
+        if (mesh is (1030, 860, 8034, 67689))
+            NativeWidePowerScreen(faces, origin, 423, 7900, 1600, 4400, 70800, 76400, repairs);
+        // The same between the gem path's third room (m2) and the right
+        // branch's 2b room, seen over the gem path's right wall (X 3800).
+        if (mesh is (1046, 953, 705, 67537))
+            NativeWidePowerScreen(faces, origin, 448, 3800, 1600, 4400, 64800, 69200, repairs);
+        // And between the gem path's last rooms (m6, m7) and the right
+        // branch's 6b/7b, from the mesh both draw: the right branch's wall
+        // tops are raised in a mesh the gem path does not draw, so they came
+        // and went with the camera zone (X 5600).
+        if (mesh is (1217, 1024, 5682, 32905))
+            NativeWidePowerScreen(faces, origin, 355, 5600, 1600, 4400, 37800, 47000, repairs);
         return repairs;
     }
 
@@ -153,12 +203,29 @@ public static partial class FramePacing
                 float ua = column % 2 == 0 ? uLow : uHigh, ub = column % 2 == 0 ? uHigh : uLow;
                 float va = row % 2 == 0 ? vHigh : vLow, vb = row % 2 == 0 ? vLow : vHigh;
                 NativeWideClipVertex Corner(float cy, float cz, float u, float v) =>
-                    t[0] with { X = x - origin.X, Y = cy - origin.Y, Z = cz - origin.Z, U = u, V = v };
+                    t[0] with { X = x - origin.X, Y = cy - origin.Y, Z = cz - origin.Z,
+                        R = NativeWidePowerScreenShade, G = NativeWidePowerScreenShade, B = NativeWidePowerScreenShade,
+                        U = u, V = v };
                 var p00 = Corner(y, z, ua, va); var p01 = Corner(y, z + Cell, ub, va);
                 var p10 = Corner(y + Cell, z, ua, vb); var p11 = Corner(y + Cell, z + Cell, ub, vb);
                 repairs.Add(new(template, p00, p01, p11, Boundary: true));
                 repairs.Add(new(template, p00, p11, p10, Boundary: true));
             }
+    }
+
+    // The completed corner's UV. Where the texture's right angle sits at another
+    // corner than the face's (bevel slivers), the parallelogram rule reaches
+    // past the texture tile into its neighbour in the page (#135: green toxic
+    // streaks above the walls); the tile's free corner is taken instead.
+    static Vector2 NativeWidePowerCornerUv(NativeWideClipVertex right, NativeWideClipVertex p, NativeWideClipVertex q)
+    {
+        var uv = new Vector2(p.U + q.U - right.U, p.V + q.V - right.V);
+        Vector2[] used = [new(right.U, right.V), new(p.U, p.V), new(q.U, q.V)];
+        Vector2 low = Vector2.Min(used[0], Vector2.Min(used[1], used[2]));
+        Vector2 high = Vector2.Max(used[0], Vector2.Max(used[1], used[2]));
+        if (uv == Vector2.Clamp(uv, low, high)) return uv;
+        Vector2[] tile = [low, new(high.X, low.Y), new(low.X, high.Y), high];
+        return tile.MaxBy(c => used.Min(u => Vector2.DistanceSquared(u, c)));
     }
 
     // Tall faces standing nearly upright.
@@ -167,6 +234,15 @@ public static partial class FramePacing
         var normal = Vector3.Cross(Position(t[1]) - Position(t[0]), Position(t[2]) - Position(t[0]));
         float low = Math.Min(t[0].Y, Math.Min(t[1].Y, t[2].Y)), high = Math.Max(t[0].Y, Math.Max(t[1].Y, t[2].Y));
         return normal.Length() >= 1 && Math.Abs(normal.Y) <= normal.Length() * 0.25f && high - low >= 300;
+    }
+
+    // Faces sloping up toward a wall's top, between upright and flat.
+    static bool NativeWidePowerLedge(NativeWideClipVertex[] t)
+    {
+        var normal = Vector3.Cross(Position(t[1]) - Position(t[0]), Position(t[2]) - Position(t[0]));
+        float low = Math.Min(t[0].Y, Math.Min(t[1].Y, t[2].Y)), high = Math.Max(t[0].Y, Math.Max(t[1].Y, t[2].Y));
+        return normal.Length() >= 1 && Math.Abs(normal.Y) > normal.Length() * 0.25f
+            && Math.Abs(normal.Y) < normal.Length() * 0.9f && high - low >= 150;
     }
 
     static Dictionary<NativeWideEdge, int> NativeWidePowerEdges(IEnumerable<NativeWideClipVertex[]> triangles)

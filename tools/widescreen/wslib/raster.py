@@ -128,7 +128,9 @@ def render(cam, meshes, repairs=None, xrange=None, w=W, h=H, cull=True):
             # Backdrop repairs: with the backdrop, or (behind fills under the backdrop) farther still.
             bias = np.array([(3e9 if int(r[2]) == 2 else 1e9) if m.backdrop else {0: 0.0, 1: 1e6, 2: 2e9}[int(r[2])]
                              for r in rs])
-            batches.append((REPAIR_LAYER + li, tris, np.ones(len(rs), bool), bias))
+            # Culled repairs (4th field) are back-face culled like the scenery.
+            nocull = np.array([not (len(r) > 3 and r[3]) for r in rs])
+            batches.append((REPAIR_LAYER + li, tris, nocull, bias))
     # Majority winding of fully visible scenery decides which side is front.
     sign = 1
     if cull:

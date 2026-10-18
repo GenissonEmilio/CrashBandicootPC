@@ -31,6 +31,11 @@ Requirements: Python 3 with numpy, scipy, Pillow; .NET 10 SDK for the two C# too
        wide.py faces 41 a__FW x0,y0,z0,x1,y1,z1
        wide.py poly  41 a__FW 892 901            # corners, colours, UVs, open edges
        wide.py axes  41                          # towers/columns: axis + C# line
+       wide.py tview 41 a0:0:0 --repairs R.json  # real textures (repairs in the bands only), retail below
+
+   `tview` shades the ID buffer with the level's own texture pages, so a repair
+   whose UVs leave its texture tile (garbage texels) or a wrong-looking fill shows
+   offline; animated textures use frame 0.
 
 3. **Write the repair in C#** (`RecompOne.Runtime/Host/FramePacing.NativeWide*.cs`).
    Building blocks: `NativeWideCopy` (box copies, mirrors, `Complete`), `NativeWideGrid`,

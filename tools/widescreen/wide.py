@@ -64,7 +64,7 @@ def _zone_distance(z, p):
 
 
 def load_repairs(path):
-    """{mesh: [(polygon, 3x3 absolute, behind)]} from the C# dump (RepairDump)."""
+    """{mesh: [(polygon, 3x3 absolute, behind, culled)]} from the C# dump (RepairDump)."""
     if not path:
         return None
     data = json.load(open(path))
@@ -72,7 +72,8 @@ def load_repairs(path):
     behind = 2 if data.get("under_backdrop") else 1
     out = {}
     for name, e in data["meshes"].items():
-        out[name] = [(r[0], np.array(r[1:10], float).reshape(3, 3), behind if r[10] else 0) for r in e["repairs"]]
+        out[name] = [(r[0], np.array(r[1:10], float).reshape(3, 3), behind if r[10] else 0,
+                      len(r) > 26 and bool(r[26])) for r in e["repairs"]]
     return out
 
 
@@ -173,7 +174,7 @@ def cmd_view(a):
             if a.box:
                 lo, hi = (np.array(v) for v in _box(a.box))
                 reps = {k: [r for r in v if ((r[1] >= lo) & (r[1] <= hi)).all()] for k, v in reps.items()}
-            reps = {k: [(p, t, 0) for p, t, _ in v] for k, v in reps.items()}
+            reps = {k: [(r[0], r[1], 0, *r[3:]) for r in v] for k, v in reps.items()}
         fr = raster.render(cam, ms, reps, cull=not a.nocull)
         out = a.out or "inspect.png"
         draw.save(draw.shaded(fr), out, notes=[f"{cam} {[m.name for m in ms]}"])
@@ -492,6 +493,33 @@ def cmd_export(a):
     print(f"{len(index['meshes'])} meshes -> {a.dir}")
 
 
+def cmd_tview(a):
+    """Textured view (real texture pages) with the repairs, and the retail view below it;
+    stretched to 16:9 so it compares with screenshots."""
+    from PIL import Image
+    from wslib import texture
+    L = level_arg(a.level)
+    cam, zone = where(L, a.where)
+    ms = L.zone_meshes(zone)
+    reps = own_repairs(L, zone, load_repairs(a.repairs)) if a.repairs else None
+    uvs = texture.load_repair_uvs(a.repairs) if a.repairs else None
+    imgs = [texture.textured(raster.render(cam, ms, reps), L.id, uvs)]
+    if reps:
+        # The game draws repairs only in the 16:9 side bands.
+        base = texture.textured(raster.render(cam, ms), L.id)
+        core = slice(raster.CX - raster.CORE, raster.CX + raster.CORE)
+        imgs[0][:, core] = base[:, core]
+        if not a.only:
+            imgs.append(base)
+    w, h = raster.W * 2, raster.W * 2 * 9 // 16
+    out = Image.new("RGB", (w, h * len(imgs)))
+    for i, im in enumerate(imgs):
+        out.paste(Image.fromarray(im).resize((w, h), Image.NEAREST), (0, h * i))
+    path = a.out or f"tview_{L.id}_{a.where.replace(':', '_').replace(',', '_')}.png"
+    out.save(path)
+    print(f"{cam} zone {zone} -> {path}")
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = ap.add_subparsers(dest="cmd", required=True)
@@ -500,6 +528,8 @@ def main():
     s = sub.add_parser("view"); s.add_argument("level"); s.add_argument("where")
     s.add_argument("--repairs"); s.add_argument("--out")
     s.add_argument("--meshes"); s.add_argument("--box"); s.add_argument("--nocull", action="store_true")
+    s = sub.add_parser("tview"); s.add_argument("level"); s.add_argument("where")
+    s.add_argument("--repairs"); s.add_argument("--out"); s.add_argument("--only", action="store_true")
     s = sub.add_parser("scan"); s.add_argument("level"); s.add_argument("--step", type=int, default=4)
     s.add_argument("--zones"); s.add_argument("--repairs"); s.add_argument("--out")
     s.add_argument("--min", type=int, default=120); s.add_argument("-v", "--verbose", action="store_true")

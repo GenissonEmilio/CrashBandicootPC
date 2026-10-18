@@ -494,7 +494,7 @@ public static partial class FramePacing
                     int opaqueStart = _nativeWideOpaque.Count, transparentStart = _nativeWideTransparent.Count;
                     AddNativeWideClippedTriangle(repairVertices, projection, screenX, screenY,
                         gpu.DrawOffsetX, gpu.DrawOffsetY, viewCenterX, viewCenterY, coreHalf, wideHalf, halfHeight,
-                        repairFlags, true, _nativeWideOpaque, _nativeWideTransparent);
+                        repairFlags, !repair.Culled, _nativeWideOpaque, _nativeWideTransparent);
                     if (behind && !repair.Boundary)
                     {
                         NativeWideBehindScenery(_nativeWideOpaque, opaqueStart);

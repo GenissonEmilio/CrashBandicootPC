@@ -11,9 +11,10 @@ public static partial class FramePacing
     // Repairs are deliberately asset-specific. A boundary can also be a real
     // cliff, doorway or hole, so extending every mesh boundary would be wrong.
     // Boundary repairs keep their true depth even where the scene would
-    // otherwise draw its additions behind all real scenery.
+    // otherwise draw its additions behind all real scenery. Culled repairs
+    // are back-face culled like the scenery (others show both sides).
     readonly record struct NativeWideRepair(int Polygon, NativeWideClipVertex A,
-        NativeWideClipVertex B, NativeWideClipVertex C, bool Boundary = false);
+        NativeWideClipVertex B, NativeWideClipVertex C, bool Boundary = false, bool Culled = false);
     readonly record struct NativeWideEdge(Vector3 A, Vector3 B);
     readonly record struct NativeWideEdgeOwner(int Polygon, int Edge, int Count);
     readonly record struct NativeWideSceneryKey(uint Level, uint X, uint Y, uint Z, int Polygons, int Vertices);
