@@ -11,6 +11,13 @@ public enum GlesFramebufferFetchPath
 
 internal static class GlShaders
 {
+    /// <summary>
+    /// GLSL ES version for GLES contexts: 320 on Android, the context's own
+    /// version for the desktop ES fallback (#167; Raspberry Pi stops at ES 3.1).
+    /// The shaders only use ES 3.0 features.
+    /// </summary>
+    public static int EsVersion { get; set; } = 320;
+
     public const string FullscreenVs = """
         #version 330 core
         layout(location = 0) in vec2 aPos;
@@ -386,7 +393,7 @@ internal static class GlShaders
     {
         if (!gles) return source;
 
-        var header = "#version 320 es";
+        var header = $"#version {EsVersion} es";
         if (source.Contains("index = 1", StringComparison.Ordinal))
             header += opaqueOnly
                 ? "\n#define GLES_OPAQUE_ONLY 1"

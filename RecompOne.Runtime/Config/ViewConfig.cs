@@ -215,6 +215,21 @@ public class ViewConfig
         set => SetBool("CrtFilter", value);
     }
 
+    public const int GraphicsApiAuto = 0;
+    public const int GraphicsApiGl33 = 1;
+    public const int GraphicsApiGles = 2;
+
+    /// <summary>
+    /// Renderer for the game window (#167, #80). Auto opens OpenGL 4.3 and falls
+    /// back to OpenGL 3.3, then OpenGL ES 3, when the driver lacks it. The other
+    /// values are tried first, then the rest of the Auto list. Applies on next start.
+    /// </summary>
+    public int GraphicsApi
+    {
+        get => Math.Clamp(GetInt("GraphicsApi", GraphicsApiAuto), GraphicsApiAuto, GraphicsApiGles);
+        set => SetInt("GraphicsApi", Math.Clamp(value, GraphicsApiAuto, GraphicsApiGles));
+    }
+
     /// <summary>Host swap-interval VSync (reduces tearing; may add input latency).</summary>
     public bool VSync
     {

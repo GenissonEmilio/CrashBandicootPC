@@ -70,7 +70,23 @@ public sealed class GlBackend : IGpuBackend
 
     public GlBackend(GL gl) { _gl = gl; _vram = new GlVram(gl); }
 
-    public bool ConfigureGlesTextureBarrier(nint address)
+    /// <summary>False below OpenGL 4.3 / ES 3.2: VRAM copies use framebuffer blits (#167, #80).</summary>
+    public bool CopyImageSupported
+    {
+        get => _vram.CopyImageSupported;
+        set => _vram.CopyImageSupported = value;
+    }
+
+    /// <summary>
+    /// Desktop OpenGL: glTextureBarrier exists (GL 4.5 or ARB_texture_barrier).
+    /// When false, a barrier from <see cref="ConfigureTextureBarrier"/> or a flush is used.
+    /// </summary>
+    public bool CoreTextureBarrier { get; set; } = true;
+
+    public bool ConfigureGlesTextureBarrier(nint address) => ConfigureTextureBarrier(address);
+
+    /// <summary>glTextureBarrierNV/EXT entry point, for drivers without the core one.</summary>
+    public bool ConfigureTextureBarrier(nint address)
     {
         if (address == 0) return false;
         _glesTextureBarrier = Marshal.GetDelegateForFunctionPointer<TextureBarrierProc>(address);
@@ -85,9 +101,11 @@ public sealed class GlBackend : IGpuBackend
     }
 
     public unsafe void InitGl(bool gles = false,
-        GlesFramebufferFetchPath framebufferFetch = GlesFramebufferFetchPath.None)
+        GlesFramebufferFetchPath framebufferFetch = GlesFramebufferFetchPath.None,
+        int glslEsVersion = 320)
     {
         _gles = gles;
+        if (gles) GlShaders.EsVersion = glslEsVersion;
         _glesFramebufferFetchPath = gles ? framebufferFetch : GlesFramebufferFetchPath.None;
         _vram.Init(gles);
         CheckError("vram.init");
@@ -1087,12 +1105,13 @@ public sealed class GlBackend : IGpuBackend
 
     void SetBlend(float src, float dst) => _gl.Uniform4(_uBlend, src, src, src, dst);
 
-    // Prefer the driver's GLES texture-barrier extension. It resolves the PS1
-    // VRAM feedback dependency without stalling the CPU after every batch.
-    // Flush is a conservative fallback for GLES drivers without the extension.
+    // Prefer the driver's texture barrier (core on desktop GL 4.5, otherwise the
+    // NV/EXT extension). It resolves the PS1 VRAM feedback dependency without
+    // stalling the CPU after every batch. Flush is a conservative fallback for
+    // drivers without any of them.
     void Barrier()
     {
-        if (!_gles)
+        if (!_gles && CoreTextureBarrier)
             _vram.Barrier();
         else if (_glesTextureBarrier != null)
             _glesTextureBarrier();

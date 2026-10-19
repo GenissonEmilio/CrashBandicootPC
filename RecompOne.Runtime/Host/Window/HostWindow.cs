@@ -39,7 +39,11 @@ internal static class HostWindow
     static IInputContext? _input;
     static GL? _gl;
     static ImGuiController? _imgui;
-    static bool _headless;
+    /// <summary>Replaces <see cref="_imgui"/> on an OpenGL ES context (#167).</summary>
+    static GlesImGuiController? _imguiEs;
+
+    /// <summary>"OpenGL 4.3 Core", "OpenGL ES 3.1", … for the dev HUD and bug reports.</summary>
+    internal static string RendererName => _window == null ? "none" : _context.Name;
     static Gpu? _gpu;
 
     static uint _displayTex;
@@ -94,11 +98,6 @@ internal static class HostWindow
         try
         {
             var embed = _embedParent != 0;
-            // Shaders are GLSL 330; CopyImageSubData needs GL 4.3+. Request 4.3 Core
-            // (not 4.5) so VMs / Mesa have a slightly better chance. Native segfaults
-            // during context create still cannot be caught in managed code.
-            Console.WriteLine("[Host] creating OpenGL 4.3 Core window…");
-            Console.Out.Flush();
             var options = WindowOptions.Default with
             {
                 Size = new Vector2D<int>(1280, 720),
@@ -110,19 +109,14 @@ internal static class HostWindow
                 FramesPerSecond = 0,
                 WindowBorder = embed ? WindowBorder.Hidden : WindowBorder.Resizable,
                 WindowState = !embed && ConfigManager.View.Fullscreen ? WindowState.Fullscreen : WindowState.Normal,
-                API = new GraphicsAPI(ContextAPI.OpenGL, ContextProfile.Core, ContextFlags.Default, new APIVersion(4, 3)),
             };
-            _window = Silk.NET.Windowing.Window.Create(options);
-            InstallGlfwErrorLog();
-            ProbeGlContext();
-            DisableFullscreenAutoIconify();
-            Console.WriteLine("[Host] window object created, initializing GLFW/GL…");
-            Console.Out.Flush();
-            _window.Load += OnLoad;
-            _window.Render += OnRender;
+            CreateGlWindow(options);
+            LogWindowEvents(_window!);
+            _window!.Render += OnRender;
             _window.Closing += OnClosing;
-            _window.Initialize();
-            LogWindowEvents(_window);
+            // Silk raises Load inside Initialize; OnLoad runs here instead so a context
+            // that fails to open never leaves half-registered panels behind.
+            OnLoad();
             Console.WriteLine("[Host] OpenGL window ready");
 
             // GLFW defaults to a generic icon — use the exe/ApplicationIcon instead (Windows).
@@ -141,15 +135,67 @@ internal static class HostWindow
         {
             Console.Error.WriteLine($"[Host] window unavailable: {e.GetType().Name}: {e.Message}");
             Console.Error.WriteLine(
-                "[Host] Need OpenGL 4.3+. In a VM try: LIBGL_ALWAYS_SOFTWARE=1 ./CrashBandicoot --run <cue>");
+                "[Host] Need OpenGL 3.3+ or OpenGL ES 3.0+. In a VM try: LIBGL_ALWAYS_SOFTWARE=1 ./CrashBandicoot --run <cue>");
             Console.Error.WriteLine("[Host] Or enable 3D acceleration / use a host with a real GPU.");
-            // Off Windows there is no launcher window behind the game: a headless
-            // session is an invisible process that never ends. Fail the launch instead.
-            if (!OperatingSystem.IsWindows())
-                throw new InvalidOperationException(
-                    $"Could not open the game window: {e.Message}. An OpenGL 4.3 GPU driver is required.", e);
-            _headless = true;
+            // A headless session used to keep running behind a black launcher panel
+            // with music and no input (#80). Fail the launch with the reason instead.
+            _window?.Dispose();
+            _window = null;
+            throw new InvalidOperationException(
+                $"Could not open the game window: {e.Message}. " +
+                "The game needs a GPU driver with OpenGL 3.3 or OpenGL ES 3.0; update the graphics driver.", e);
         }
+    }
+
+    /// <summary>Context the window was opened with (#167).</summary>
+    static GlContextChoice _context;
+
+    /// <summary>
+    /// Open the window with the first context of the Renderer chain the driver
+    /// accepts: OpenGL 4.3 Core, then 3.3 Core, then OpenGL ES 3.2/3.1/3.0 (#167, #80).
+    /// </summary>
+    static void CreateGlWindow(WindowOptions options)
+    {
+        string? lastError = null;
+        foreach (var choice in GlContextChoice.Chain(ConfigManager.View.GraphicsApi))
+        {
+            Console.WriteLine($"[Host] creating {choice.Name} window…");
+            Console.Out.Flush();
+            _window = Silk.NET.Windowing.Window.Create(options with { API = choice.Api });
+            InstallGlfwErrorLog();
+            // Off Windows Silk segfaults inside GLFW when the context cannot be created,
+            // so each context is tried on a hidden window first. On Windows Silk throws.
+            if (!ProbeGlContext(choice))
+            {
+                lastError = $"{choice.Name}: {_lastGlfwError ?? "not supported"}";
+                Console.Error.WriteLine($"[Host] {lastError}");
+                _window.Dispose();
+                _window = null;
+                continue;
+            }
+            DisableFullscreenAutoIconify();
+            SetContextCreationApi(choice.Egl);
+            Console.WriteLine("[Host] window object created, initializing GLFW/GL…");
+            Console.Out.Flush();
+            try
+            {
+                _window.Initialize();
+            }
+            catch (Exception e) when (OperatingSystem.IsWindows())
+            {
+                lastError = $"{choice.Name}: {e.Message}";
+                Console.Error.WriteLine($"[Host] {lastError}");
+                _window.Dispose();
+                _window = null;
+                continue;
+            }
+            _context = choice;
+            Console.WriteLine($"[Host] {choice.Name} context created");
+            return;
+        }
+        throw new InvalidOperationException(
+            "no OpenGL 4.3, OpenGL 3.3 or OpenGL ES 3.0 context could be created" +
+            (lastError != null ? $" (last error: {lastError})" : ""));
     }
 
     // Silk.NET throws GLFW errors only on Windows; elsewhere it queues them in a
@@ -186,26 +232,41 @@ internal static class HostWindow
     /// <summary>
     /// Off Windows, Silk.NET keeps going when GLFW cannot create the window and then
     /// segfaults inside GLFW on the null handle. Try the same context on a hidden
-    /// 1x1 window first so that case ends with a readable error instead.
+    /// 1x1 window first so that case moves on to the next context instead.
     /// </summary>
-    static unsafe void ProbeGlContext()
+    static unsafe bool ProbeGlContext(GlContextChoice choice)
     {
-        if (OperatingSystem.IsWindows() || !SilkGlfw.GlfwProvider.GLFW.IsValueCreated) return;
+        if (OperatingSystem.IsWindows() || !SilkGlfw.GlfwProvider.GLFW.IsValueCreated) return true;
         var glfw = SilkGlfw.GlfwProvider.GLFW.Value;
+        _lastGlfwError = null;
         glfw.DefaultWindowHints();
         glfw.WindowHint(SilkGlfw.WindowHintBool.Visible, false);
-        glfw.WindowHint(SilkGlfw.WindowHintClientApi.ClientApi, SilkGlfw.ClientApi.OpenGL);
-        glfw.WindowHint(SilkGlfw.WindowHintInt.ContextVersionMajor, 4);
-        glfw.WindowHint(SilkGlfw.WindowHintInt.ContextVersionMinor, 3);
-        glfw.WindowHint(SilkGlfw.WindowHintOpenGlProfile.OpenGlProfile, SilkGlfw.OpenGlProfile.Core);
+        glfw.WindowHint(SilkGlfw.WindowHintClientApi.ClientApi,
+            choice.Es ? SilkGlfw.ClientApi.OpenGLES : SilkGlfw.ClientApi.OpenGL);
+        glfw.WindowHint(SilkGlfw.WindowHintContextApi.ContextCreationApi,
+            choice.Egl ? SilkGlfw.ContextApi.EglContextApi : SilkGlfw.ContextApi.NativeContextApi);
+        glfw.WindowHint(SilkGlfw.WindowHintInt.ContextVersionMajor, choice.Major);
+        glfw.WindowHint(SilkGlfw.WindowHintInt.ContextVersionMinor, choice.Minor);
+        if (!choice.Es)
+            glfw.WindowHint(SilkGlfw.WindowHintOpenGlProfile.OpenGlProfile, SilkGlfw.OpenGlProfile.Core);
         glfw.WindowHint(SilkGlfw.WindowHintInt.DepthBits, 24);
         glfw.WindowHint(SilkGlfw.WindowHintInt.StencilBits, 8);
         var probe = glfw.CreateWindow(1, 1, "GL probe", null, null);
         glfw.DefaultWindowHints();
-        if (probe == null)
-            throw new InvalidOperationException(
-                "OpenGL 4.3 Core context could not be created" + (_lastGlfwError != null ? $" ({_lastGlfwError})" : ""));
+        if (probe == null) return false;
         glfw.DestroyWindow(probe);
+        return true;
+    }
+
+    /// <summary>
+    /// Silk sets the client API and version but not GLFW's context creation API,
+    /// and it never resets hints, so an EGL choice is set here before Initialize.
+    /// </summary>
+    static void SetContextCreationApi(bool egl)
+    {
+        if (OperatingSystem.IsWindows() || !SilkGlfw.GlfwProvider.GLFW.IsValueCreated) return;
+        SilkGlfw.GlfwProvider.GLFW.Value.WindowHint(SilkGlfw.WindowHintContextApi.ContextCreationApi,
+            egl ? SilkGlfw.ContextApi.EglContextApi : SilkGlfw.ContextApi.NativeContextApi);
     }
 
     /// <summary>
@@ -243,11 +304,11 @@ internal static class HostWindow
         _endSessionRequested = false;
         _ending = false;
         _layoutPending = true;
-        _headless = false;
         _gpu = null;
         _input = null;
         _gl = null;
         _imgui = null;
+        _imguiEs = null;
         _glBackend = null;
         _displayTex = _vramTex = _ramTex = 0;
         _discPicker = null;
@@ -302,7 +363,7 @@ internal static class HostWindow
     public static void Present(Gpu? gpu)
     {
         _gpu = gpu;
-        if (_headless || _window == null) return;
+        if (_window == null) return;
         try { _window.DoEvents(); }
         catch (Exception e) {
             Console.WriteLine(e.Message);
@@ -385,7 +446,7 @@ internal static class HostWindow
     /// <summary>Pump window/input events without presenting a frame (for pad sampling mid-frame).</summary>
     public static void PumpInput()
     {
-        if (_headless || _window == null) return;
+        if (_window == null) return;
         try { _window.DoEvents(); } catch { }
         if (_window.IsClosing || _endSessionRequested) { EndSession(); return; }
         InputManager.Poll();
@@ -394,7 +455,7 @@ internal static class HostWindow
 
     internal static void Pump()
     {
-        if (_headless || _window == null) return;
+        if (_window == null) return;
         try { _window.DoEvents(); } catch { }
         if (_window.IsClosing || _endSessionRequested) { EndSession(); return; }
         _window.DoRender();
@@ -422,7 +483,7 @@ internal static class HostWindow
 
     public static void Shutdown()
     {
-        if (!_headless && _window != null)
+        if (_window != null)
         {
             // Close() only requests shutdown; its Closing callback is not guaranteed
             // to run before control returns to WinForms. Tear down input first so a
@@ -545,7 +606,7 @@ internal static class HostWindow
 
     public static void WaitForValidDisc() // wait for disc path to be valid before running it!!
     {
-        if (_headless || _window == null) return;
+        if (_window == null) return;
 
         while (StartupNotice.NeedsAck)
         {
@@ -646,8 +707,15 @@ internal static class HostWindow
 
         int internalRes = ConfigManager.View.InternalResolution;
         Hle.GlVram.Scale = internalRes;
+        var driver = GlDriverInfo.Capture(_gl, _context.Es, name => _window!.GLContext!.GetProcAddress(name));
+        Console.WriteLine($"[Host] renderer {_context.Name}: {driver.Summary}");
         _glBackend = new Hle.GlBackend(_gl);
-        _glBackend.InitGl();
+        driver.Configure(_glBackend);
+        _glBackend.InitGl(_context.Es, driver.FramebufferFetch, driver.GlslEsVersion);
+        if (!_glBackend.Ready)
+            Console.Error.WriteLine(driver.HleBlendSupported
+                ? $"[Host] GPU renderer failed ({_glBackend.LastDiagnostic}); using the software renderer"
+                : "[Host] driver has no framebuffer fetch or dual-source blending; using the software renderer");
         Hle.GpuHle.Active = _glBackend.Ready;
         Hle.GpuHle.Backend = _glBackend;
         Hle.GpuHle.NativeResolution = internalRes <= 1;
@@ -661,7 +729,10 @@ internal static class HostWindow
         ApplyWidescreen(ConfigManager.View.Widescreen);
         ApplyVSync(ConfigManager.View.VSync);
 
-        _imgui = new ImGuiController(_gl, _window, new ImGuiInputContext(_input), null, ConfigureImGui);
+        if (_context.Es)
+            _imguiEs = new GlesImGuiController(_gl, _window, new ImGuiInputContext(_input), ConfigureImGui);
+        else
+            _imgui = new ImGuiController(_gl, _window, new ImGuiInputContext(_input), null, ConfigureImGui);
 
         PanelManager.Register(new OutputPanel());
         PanelManager.Register(new VramViewerPanel());
@@ -731,7 +802,8 @@ internal static class HostWindow
     {
         Diagnostics.FrameTimer.Mark(Diagnostics.FrameTimer.Phase.Events);
         var gl = _gl!;
-        _imgui!.Update((float)dt);
+        if (_imguiEs != null) _imguiEs.Update((float)dt);
+        else _imgui!.Update((float)dt);
         ApplyUiScale();
         Diagnostics.FrameTimer.Mark(Diagnostics.FrameTimer.Phase.Ui);
 
@@ -798,7 +870,8 @@ internal static class HostWindow
         DevHudOverlay.Draw();
         gl.BindFramebuffer(FramebufferTarget.Framebuffer, 0);
         gl.Viewport(0, 0, (uint)fbDef.X, (uint)fbDef.Y);
-        _imgui.Render();
+        if (_imguiEs != null) _imguiEs.Render();
+        else _imgui!.Render();
         Diagnostics.FrameTimer.Mark(Diagnostics.FrameTimer.Phase.Ui);
     }
 
@@ -853,6 +926,7 @@ internal static class HostWindow
         InputManager.Shutdown();
         _glBackend?.Dispose();
         _imgui?.Dispose();
+        _imguiEs?.Dispose();
         // ImGuiController.Dispose only frees renderer resources; the input context
         // owns the keyboard callbacks and must be disposed to unsubscribe them.
         _input?.Dispose();

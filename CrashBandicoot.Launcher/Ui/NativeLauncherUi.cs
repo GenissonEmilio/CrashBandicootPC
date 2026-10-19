@@ -95,6 +95,7 @@ public sealed class NativeLauncherUi : UserControl, ILauncherUi
     ThemeCheck? _widescreen;
     ComboBox? _frameRate;
     ComboBox? _internalRes;
+    ComboBox? _renderer;
     ComboBox? _texFilter;
     ThemeSlider? _filterStrength;
     Label? _filterStrengthLabel;
@@ -292,6 +293,8 @@ public sealed class NativeLauncherUi : UserControl, ILauncherUi
             SetCombo(_frameRate, fps);
         if (state.TryGetProperty("internalResolution", out var ir) && ir.TryGetInt32(out var scale))
             SetCombo(_internalRes, scale);
+        if (state.TryGetProperty("graphicsApi", out var ga) && ga.TryGetInt32(out var api))
+            SetCombo(_renderer, api);
         if (state.TryGetProperty("textureFilter", out var tf) && tf.TryGetInt32(out var filter))
         {
             SetCombo(_texFilter, filter);
@@ -1548,6 +1551,14 @@ public sealed class NativeLauncherUi : UserControl, ILauncherUi
         y += 52;
         AddHint("Curved CRT TV look by Mattias Gustavsson: scanlines, glow, and a shadow mask.");
 
+        AddLabel("Renderer");
+        _renderer = MakeCombo(new Point(controlX, y), [
+            (0, "Auto (recommended)"), (1, "OpenGL 3.3"), (2, "OpenGL ES 3"),
+        ]);
+        page.Controls.Add(_renderer);
+        y += rowGap;
+        AddHint("Auto: OpenGL 4.3, or OpenGL 3.3 / ES 3 when the graphics driver lacks it. Change it only if the game does not start. Applies on next game start.");
+
         // ── Audio ──
         BeginPage(2);
         AddLabel("Master volume");
@@ -1622,6 +1633,7 @@ public sealed class NativeLauncherUi : UserControl, ILauncherUi
                 scaledDither = _scaledDither?.Checked ?? true,
                 dejitter = _dejitter?.Checked ?? false,
                 crtFilter = _crtFilter?.Checked ?? false,
+                graphicsApi = _renderer?.SelectedItem is Kv gaKv ? gaKv.Value : 0,
                 saveLives = _saveLives?.Checked ?? true,
                 analogMovement = _analogMovement?.Checked ?? false,
                 boxCounter = _boxCounter?.Checked ?? false,

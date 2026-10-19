@@ -135,6 +135,7 @@ internal static class DevHudOverlay
         // Batches = GL draw submissions; cpu reads stall the game until the GPU catches up.
         if (Hle.GpuHle.Backend is Hle.GlBackend gl)
         {
+            ImGui.TextUnformatted(HostWindow.RendererName + (gl.Ready ? "" : "  (software)"));
             ImGui.TextUnformatted($"batches {gl.LastFrameFlushes}  verts {gl.LastFrameVertices}");
             ImGui.TextUnformatted($"cpu reads {gl.LastFrameCpuReads}  rt copies {gl.LastFrameWritebacks}");
             ImGui.Separator();

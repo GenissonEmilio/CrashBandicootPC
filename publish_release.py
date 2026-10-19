@@ -5,12 +5,15 @@ Usage (from repo root):
     python publish_release.py                  # interactive: Windows / Linux / Android
     python publish_release.py --platform windows
     python publish_release.py --platform linux
+    python publish_release.py --platform linux-arm64
     python publish_release.py --platform android
     python publish_release.py --platform all
     python publish_release.py --rid linux-x64  # legacy RID flag (Windows/Linux only)
 
 Requires: .NET 10 SDK. Android also needs the Android SDK + a release keystore
 (created automatically on first Android publish into signing/, gitignored).
+linux-arm64 also needs native/linux-arm64/libcimgui.so and libnfd.so, built by
+the "linux-arm64 natives" GitHub workflow (see native/linux-arm64/README.md).
 """
 
 from __future__ import annotations
@@ -40,18 +43,30 @@ KEY_ALIAS = "upload"
 DEFAULT_OUT = {
     "windows": ROOT / "publish-single",
     "linux": ROOT / "publish-linux",
+    "linux-arm64": ROOT / "publish-linux-arm64",
     "android": ROOT / "publish-android",
 }
 
 RID_FRAMEWORK = {
     "win-x64": "net10.0-windows",
     "linux-x64": "net10.0",
+    "linux-arm64": "net10.0",
 }
 
 PLATFORM_RID = {
     "windows": "win-x64",
     "linux": "linux-x64",
+    "linux-arm64": "linux-arm64",
 }
+
+ALL_PLATFORMS = ["windows", "linux", "linux-arm64", "android"]
+
+# ImGui.NET and NativeFileDialogSharp ship no linux-arm64 natives. Our own
+# workflow (.github/workflows/linux-arm64-natives.yml) builds them; the
+# launcher csproj packs them into the linux-arm64 single-file.
+ARM64_NATIVE_DIR = ROOT / "native" / "linux-arm64"
+ARM64_NATIVES = ("libcimgui.so", "libnfd.so")
+EM_AARCH64 = 183
 
 FORBIDDEN_GLOBS = (
     "*.bin",
@@ -217,6 +232,43 @@ def warn_forbidden(out_dir: Path) -> None:
         print(f"  … and {len(bad) - 20} more")
 
 
+def check_arm64_natives() -> None:
+    """Stop early when native/linux-arm64 lacks an aarch64 build of a library."""
+    problems: list[str] = []
+    for name in ARM64_NATIVES:
+        path = ARM64_NATIVE_DIR / name
+        if not path.is_file():
+            problems.append(f"{name} is missing")
+            continue
+        head = path.read_bytes()[:20]
+        if len(head) < 20 or head[:4] != b"\x7fELF" or head[4] != 2:
+            problems.append(f"{name} is not a 64-bit Linux library")
+        elif struct.unpack("<H", head[18:20])[0] != EM_AARCH64:
+            problems.append(f"{name} is not built for arm64 (aarch64)")
+    if not problems:
+        print(f"[publish] arm64 natives OK ({', '.join(ARM64_NATIVES)})")
+        return
+    die(
+        f"{ARM64_NATIVE_DIR.relative_to(ROOT)}: " + "; ".join(problems) + ".\n"
+        "  On GitHub: Actions > 'linux-arm64 natives' > Run workflow, then copy\n"
+        "  libcimgui.so and libnfd.so from its 'linux-arm64-natives' artifact into\n"
+        f"  {ARM64_NATIVE_DIR}\n"
+        "  (or publish the other platforms one at a time)."
+    )
+
+
+def check_arm64_bundle(binary: Path) -> None:
+    """The bundle manifest stores file names uncompressed; make sure ours are in it."""
+    data = binary.read_bytes()
+    missing = [name for name in ARM64_NATIVES if name.encode() not in data]
+    if missing:
+        die(
+            f"{binary.name} does not contain {', '.join(missing)}. "
+            "Check the linux-arm64 ItemGroup in CrashBandicoot.Launcher.csproj."
+        )
+    print(f"[publish] bundle contains {', '.join(ARM64_NATIVES)}")
+
+
 def publish_desktop(out_dir: Path, rid: str) -> Path:
     if not PROJECT.is_file():
         die(f"project not found: {PROJECT}")
@@ -270,6 +322,8 @@ def publish_desktop(out_dir: Path, rid: str) -> Path:
     binary = expected_binary(out_dir, rid)
     if not binary.is_file():
         die(f"expected binary missing: {binary}")
+    if rid == "linux-arm64":
+        check_arm64_bundle(binary)
 
     for junk in out_dir.glob("*.pdb"):
         junk.unlink(missing_ok=True)
@@ -299,6 +353,8 @@ def publish_desktop(out_dir: Path, rid: str) -> Path:
         print(f"  1. Copy/run:  {binary}   (opens the launcher; --run /path/to/game.cue skips it)")
         print("  2. Needs OpenGL 4.3+ (OpenAL Soft is bundled); the launcher window needs X11/XWayland")
         print("  3. Expect next to the binary: settings.json, save/, game/, mods/")
+        if rid == "linux-arm64":
+            print("  4. arm64: needs a 64-bit OS, e.g. Raspberry Pi OS 64-bit Bookworm or newer")
     return binary
 
 
@@ -560,33 +616,38 @@ def publish_android(out_dir: Path) -> Path:
 def pick_platforms(args: argparse.Namespace) -> list[str]:
     if args.platform:
         if args.platform == "all":
-            return ["windows", "linux", "android"]
+            return list(ALL_PLATFORMS)
         return [args.platform]
     if args.rid:
         if args.rid.startswith("win-"):
             return ["windows"]
+        if args.rid == "linux-arm64":
+            return ["linux-arm64"]
         return ["linux"]
     if not sys.stdin.isatty():
-        die("pass --platform windows|linux|android|all")
+        die("pass --platform windows|linux|linux-arm64|android|all")
 
     print()
     print("Crash Bandicoot — publish release")
     print()
-    print("  1) Windows   (win-x64, WinForms launcher)")
-    print("  2) Linux     (linux-x64, CLI + game window)")
-    print("  3) Android   (signed APK, arm64)")
-    print("  4) All three")
+    print("  1) Windows      (win-x64, WinForms launcher)")
+    print("  2) Linux        (linux-x64, CLI + game window)")
+    print("  3) Android      (signed APK, arm64)")
+    print("  4) All four     (Windows, Linux, Linux arm64, Android)")
+    print("  5) Linux arm64  (linux-arm64, Raspberry Pi 4/5; needs native/linux-arm64)")
     print()
-    choice = input("Choice [1-4]: ").strip()
+    choice = input("Choice [1-5]: ").strip()
     mapping = {
         "1": ["windows"],
         "2": ["linux"],
         "3": ["android"],
-        "4": ["windows", "linux", "android"],
+        "4": list(ALL_PLATFORMS),
+        "5": ["linux-arm64"],
         "windows": ["windows"],
         "linux": ["linux"],
+        "linux-arm64": ["linux-arm64"],
         "android": ["android"],
-        "all": ["windows", "linux", "android"],
+        "all": list(ALL_PLATFORMS),
     }
     picked = mapping.get(choice.lower())
     if not picked:
@@ -606,7 +667,7 @@ def main() -> None:
     )
     ap.add_argument(
         "--platform",
-        choices=("windows", "linux", "android", "all"),
+        choices=("windows", "linux", "linux-arm64", "android", "all"),
         help="target platform (default: interactive menu)",
     )
     ap.add_argument(
@@ -654,6 +715,8 @@ def main() -> None:
     platforms = pick_platforms(args)
     if args.out is not None and len(platforms) > 1:
         die("--out cannot be used with multiple platforms; publish one at a time")
+    if "linux-arm64" in platforms:
+        check_arm64_natives()
 
     require_dotnet()
     print(f"[publish] version {app_version()}")

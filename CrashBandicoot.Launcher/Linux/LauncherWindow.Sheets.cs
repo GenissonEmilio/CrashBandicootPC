@@ -281,6 +281,8 @@ sealed partial class LauncherWindow
         var dejitter = Nav(new ThemeCheck("Dejitter") { Checked = view.Dejitter });
         var scaledDither = Nav(new ThemeCheck("Scaled dither") { Checked = view.ScaledDither });
         var crtFilter = Nav(new ThemeCheck("CRT filter (MattiasCRT)") { Checked = view.CrtFilter });
+        var renderer = Nav(MakeCombo([(0, "Auto (recommended)"), (1, "OpenGL 3.3"), (2, "OpenGL ES 3")],
+            view.GraphicsApi));
 
         var vol = Nav(new ThemeSlider { Value = (int)Math.Round(game.MasterVolume * 100) });
         var muted = Nav(new ThemeCheck("Muted") { Checked = game.Muted });
@@ -328,7 +330,9 @@ sealed partial class LauncherWindow
                     WithMargin(scaledDither, new Thickness(0, 0, 0, 14)),
                     Hint("Dither dots keep the PS1 pixel size at any internal resolution, like the original. Off: finer dots above 1x. No effect with Dedither."),
                     WithMargin(crtFilter, new Thickness(0, 0, 0, 14)),
-                    Hint("Curved CRT TV look by Mattias Gustavsson: scanlines, glow, and a shadow mask.", 8),
+                    Hint("Curved CRT TV look by Mattias Gustavsson: scanlines, glow, and a shadow mask."),
+                    Row(Label("Renderer", 202), renderer, 14),
+                    Hint("Auto: OpenGL 4.3, or OpenGL 3.3 / ES 3 when the graphics driver lacks it. Change it only if the game does not start. Applies on next game start.", 8),
                 },
             },
             new()
@@ -385,6 +389,7 @@ sealed partial class LauncherWindow
             view.Dejitter = dejitter.Checked;
             view.ScaledDither = scaledDither.Checked;
             view.CrtFilter = crtFilter.Checked;
+            view.GraphicsApi = ComboValue(renderer, 0);
             view.SaveLives = saveLives.Checked;
             view.AnalogMovement = analogMovement.Checked;
             view.BoxCounter = boxCounter.Checked;

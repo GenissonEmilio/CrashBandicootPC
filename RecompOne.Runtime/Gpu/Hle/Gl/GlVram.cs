@@ -12,11 +12,18 @@ public sealed class GlVram
     bool _gles;
     uint _tex, _fbo;
     uint _stageTex, _stageFbo;
-    uint _scratchTex;
+    uint _scratchTex, _scratchFbo;
     byte[] _transfer = [];
 
     public uint Texture => _tex;
     public uint Fbo => _fbo;
+
+    /// <summary>
+    /// glCopyImageSubData is core in OpenGL 4.3 and ES 3.2 only. The GL 3.3 and
+    /// ES 3.0/3.1 fallbacks (#167, #80) copy through the scratch texture with
+    /// two framebuffer blits instead.
+    /// </summary>
+    public bool CopyImageSupported { get; set; } = true;
 
     public GlVram(GL gl) => _gl = gl;
 
@@ -117,6 +124,11 @@ public sealed class GlVram
     public void CopyRect(int sx, int sy, int dx, int dy, int w, int h)
     {
         int sw = w * Scale, sh = h * Scale;
+        if (!CopyImageSupported)
+        {
+            BlitCopy(sx * Scale, sy * Scale, dx * Scale, dy * Scale, sw, sh);
+            return;
+        }
         bool overlap = sx < dx + w && dx < sx + w && sy < dy + h && dy < sy + h;
         if (!overlap)
         {
@@ -167,6 +179,37 @@ public sealed class GlVram
         _gl.BindFramebuffer(FramebufferTarget.Framebuffer, _fbo);
     }
 
+    /// <summary>
+    /// CopyRect without glCopyImageSubData. OpenGL ES forbids a blit whose read
+    /// and draw framebuffers are the same, so even non-overlapping rectangles
+    /// go through the scratch texture. Coordinates are already scaled.
+    /// </summary>
+    void BlitCopy(int sx, int sy, int dx, int dy, int sw, int sh)
+    {
+        _gl.GetInteger(GLEnum.DrawFramebufferBinding, out int drawFbo);
+        _gl.GetInteger(GLEnum.ReadFramebufferBinding, out int readFbo);
+        EnsureScratch();
+        if (_scratchFbo == 0)
+            _scratchFbo = CreateFbo(_scratchTex);
+
+        bool scissor = _gl.IsEnabled(EnableCap.ScissorTest);
+        if (scissor) _gl.Disable(EnableCap.ScissorTest);
+
+        _gl.BindFramebuffer(FramebufferTarget.ReadFramebuffer, _fbo);
+        _gl.BindFramebuffer(FramebufferTarget.DrawFramebuffer, _scratchFbo);
+        _gl.BlitFramebuffer(sx, sy, sx + sw, sy + sh, 0, 0, sw, sh,
+            ClearBufferMask.ColorBufferBit, BlitFramebufferFilter.Nearest);
+        _gl.BindFramebuffer(FramebufferTarget.ReadFramebuffer, _scratchFbo);
+        _gl.BindFramebuffer(FramebufferTarget.DrawFramebuffer, _fbo);
+        _gl.BlitFramebuffer(0, 0, sw, sh, dx, dy, dx + sw, dy + sh,
+            ClearBufferMask.ColorBufferBit, BlitFramebufferFilter.Nearest);
+
+        // CopyImageSubData leaves bindings and scissor alone; so must this.
+        _gl.BindFramebuffer(FramebufferTarget.DrawFramebuffer, (uint)drawFbo);
+        _gl.BindFramebuffer(FramebufferTarget.ReadFramebuffer, (uint)readFbo);
+        if (scissor) _gl.Enable(EnableCap.ScissorTest);
+    }
+
     void EnsureScratch()
     {
         if (_scratchTex != 0) return;
@@ -177,6 +220,7 @@ public sealed class GlVram
     {
         if (_fbo != 0) _gl.DeleteFramebuffer(_fbo);
         if (_stageFbo != 0) _gl.DeleteFramebuffer(_stageFbo);
+        if (_scratchFbo != 0) _gl.DeleteFramebuffer(_scratchFbo);
         if (_tex != 0) _gl.DeleteTexture(_tex);
         if (_stageTex != 0) _gl.DeleteTexture(_stageTex);
         if (_scratchTex != 0) _gl.DeleteTexture(_scratchTex);

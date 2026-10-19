@@ -1,0 +1,124 @@
+# Builds the two native libraries whose NuGet packages have no linux-arm64
+# build (issue #165):
+#   libcimgui.so  for ImGui.NET 1.90.8.1
+#   libnfd.so     for NativeFileDialogSharp 0.5.0 (GTK 3 file picker)
+# Both come from the upstream sources, at the exact commits those packages
+# were built from. Every other native dependency (GLFW, SDL, OpenAL, Skia,
+# HarfBuzz, rabbitizer) already ships linux-arm64 in its package.
+#
+# Run by hand: Actions > "linux-arm64 natives" > Run workflow. Copy the two
+# .so files of the "linux-arm64-natives" artifact into native/linux-arm64/,
+# then run: python publish_release.py --platform linux-arm64
+name: linux-arm64 natives
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  # cimgui tag 1.90.8dock (Dear ImGui docking 1.90.8): the commit that
+  # ImGui.NET-nativebuild v1.90.8 builds the ImGui.NET 1.90.8.1 natives from.
+  CIMGUI_REF: 7c16d31cdb9d2db3038b324fe967ffa76b02c8c4
+  # milleniumbug/nativefiledialog: the submodule commit of NativeFileDialogSharp 0.5.0.
+  NFD_REF: 258a8850230f74ffdcf1c78d9bb012ea540e1bc5
+
+jobs:
+  build:
+    # Ubuntu 22.04 = glibc 2.35. GLFW and OpenAL already need glibc 2.34, so
+    # this adds no stricter requirement in practice (checked below).
+    runs-on: ubuntu-22.04-arm
+    steps:
+      - name: Install build tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends build-essential cmake pkg-config libgtk-3-dev file unzip curl
+
+      - name: Check out cimgui
+        uses: actions/checkout@v7
+        with:
+          repository: cimgui/cimgui
+          ref: ${{ env.CIMGUI_REF }}
+          submodules: recursive
+          path: cimgui
+          persist-credentials: false
+
+      - name: Check out nativefiledialog
+        uses: actions/checkout@v7
+        with:
+          repository: milleniumbug/nativefiledialog
+          ref: ${{ env.NFD_REF }}
+          path: nfd
+          persist-credentials: false
+
+      - name: Build libcimgui.so
+        # Same as ImGui.NET-nativebuild's build-native.sh: cimgui's own
+        # CMakeLists, Release. It names the file cimgui.so (PREFIX ""); the
+        # NuGet package ships it as libcimgui.so.
+        run: |
+          cmake -S cimgui -B cimgui/build -DCMAKE_BUILD_TYPE=Release
+          cmake --build cimgui/build -j"$(nproc)"
+          mkdir -p out
+          cp cimgui/build/cimgui.so out/libcimgui.so
+          strip --strip-unneeded out/libcimgui.so
+
+      - name: Build libnfd.so
+        # Same flags as build/gmake_linux/nfd.make (config release_x64), minus
+        # -m64, which aarch64 gcc rejects.
+        run: |
+          gcc -O2 -fPIC -Wall -Wextra -fno-exceptions -DNDEBUG \
+            -Infd/src/include $(pkg-config --cflags gtk+-3.0) \
+            -shared -Wl,-soname=libnfd.so -s \
+            -o out/libnfd.so nfd/src/nfd_common.c nfd/src/nfd_gtk.c \
+            $(pkg-config --libs gtk+-3.0)
+
+      - name: Check architecture and glibc
+        run: |
+          for f in libcimgui.so libnfd.so; do
+            file "out/$f"
+            if ! file "out/$f" | grep -q 'ARM aarch64'; then
+              echo "::error::$f is not an aarch64 library"
+              exit 1
+            fi
+            echo "$f needs: $(readelf -d "out/$f" | sed -n 's/.*NEEDED.*\[\(.*\)\]/\1/p' | tr '\n' ' ')"
+            echo "$f newest glibc symbol: $(objdump -T "out/$f" | grep -o 'GLIBC_[0-9.]*' | sort -uV | tail -1)"
+          done
+
+      - name: Compare exports with the x64 libraries in the NuGet packages
+        # Same sources must give the same C exports. C++ (mangled) names are
+        # skipped: their va_list types differ between x64 and arm64.
+        run: |
+          mkdir -p ref
+          curl -sSfL -o ref/imgui.nupkg https://api.nuget.org/v3-flatcontainer/imgui.net/1.90.8.1/imgui.net.1.90.8.1.nupkg
+          curl -sSfL -o ref/nfd.nupkg https://api.nuget.org/v3-flatcontainer/nativefiledialogsharp/0.5.0/nativefiledialogsharp.0.5.0.nupkg
+          unzip -p ref/imgui.nupkg runtimes/linux-x64/native/libcimgui.so > ref/libcimgui.so
+          unzip -p ref/nfd.nupkg runtimes/linux-x64/native/libnfd.so > ref/libnfd.so
+          exports() { nm -D --defined-only "$1" | awk '$2 == "T" && $3 !~ /^_/ { print $3 }' | sort; }
+          for f in libcimgui.so libnfd.so; do
+            if ! diff <(exports "ref/$f") <(exports "out/$f"); then
+              echo "::error::$f exports differ from the linux-x64 build in the NuGet package"
+              exit 1
+            fi
+            echo "$f: $(exports "out/$f" | wc -l) C exports, same as linux-x64"
+          done
+
+      - name: Write SOURCES.txt
+        run: |
+          {
+            echo "Built by ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+            echo "Runner: ubuntu-22.04-arm, $(gcc --version | head -1)"
+            echo "libcimgui.so: https://github.com/cimgui/cimgui/tree/$CIMGUI_REF (tag 1.90.8dock)"
+            echo "libnfd.so:    https://github.com/milleniumbug/nativefiledialog/tree/$NFD_REF"
+            echo
+            (cd out && sha256sum libcimgui.so libnfd.so)
+          } > out/SOURCES.txt
+          cat out/SOURCES.txt
+
+      - name: Upload
+        uses: actions/upload-artifact@v7
+        with:
+          name: linux-arm64-natives
+          path: out/
+          if-no-files-found: error
+          retention-days: 90
