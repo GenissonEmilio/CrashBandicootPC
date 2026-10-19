@@ -1008,11 +1008,18 @@ public static partial class FramePacing
         return n;
     }
 
+    // A corner made by clipping in screen space. Colours and UVs stay affine,
+    // as the unclipped triangle draws them, but depth follows the perspective:
+    // only 1/Z is linear across the screen. A linear Z put band-edge corners
+    // too far away, so walls 40 units behind Lights Out's window panes showed
+    // through them in triangular patches (#144).
     static HleVertex LerpHle(in HleVertex a, in HleVertex b, float t) => new()
     {
         X = a.X + (b.X - a.X) * t,
         Y = a.Y + (b.Y - a.Y) * t,
-        Z = a.Z + (b.Z - a.Z) * t,
+        Z = a.HasGteZ && b.HasGteZ && a.Z > 0f && b.Z > 0f
+            ? 1f / (1f / a.Z + (1f / b.Z - 1f / a.Z) * t)
+            : a.Z + (b.Z - a.Z) * t,
         R = (byte)Math.Clamp((int)(a.R + (b.R - a.R) * t + 0.5f), 0, 255),
         G = (byte)Math.Clamp((int)(a.G + (b.G - a.G) * t + 0.5f), 0, 255),
         B = (byte)Math.Clamp((int)(a.B + (b.B - a.B) * t + 0.5f), 0, 255),
