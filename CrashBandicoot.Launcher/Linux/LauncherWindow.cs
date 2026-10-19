@@ -114,6 +114,7 @@ sealed partial class LauncherWindow : Window
         _anim.Start();
         _stage.Focus();
         InitState();
+        RecompOne.Runtime.Host.Window.TextShaper.Warm(k => Dispatcher.UIThread.Post(() => GlyphToast.Pop(this, k)));
     }
 
     void Tick()

@@ -3,7 +3,9 @@ using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Media;
+using Avalonia.Threading;
 using RecompOne.Runtime.Config;
+using RecompOne.Runtime.Host.Window;
 using static CrashBandicoot.Launcher.Linux.LinuxTheme;
 
 namespace CrashBandicoot.Launcher.Linux;
@@ -331,7 +333,7 @@ sealed class KeyCaptureBox : ThemeControl, INavItem
 /// <summary>Flat primary (orange) or ghost (dark) button, like the Windows ThemedButton.</summary>
 sealed class ThemeButton : ThemeControl, INavItem
 {
-    readonly string _text;
+    string _text;
     readonly bool _primary;
     bool _pressed;
 
@@ -341,6 +343,16 @@ sealed class ThemeButton : ThemeControl, INavItem
         _primary = primary;
         Width = width;
         Height = 42;
+    }
+
+    public string Caption
+    {
+        get => _text;
+        set
+        {
+            _text = value;
+            InvalidateVisual();
+        }
     }
 
     public event EventHandler? Click;
@@ -566,5 +578,138 @@ sealed class ModGroupHeader : ThemeControl, INavItem
 
         var count = Text(_count == 1 ? "1 mod" : $"{_count} mods", NunitoFace, 13, Brush(150, Sand));
         g.DrawText(count, new Point(r.Width - 12 - count.Width, (r.Height - count.Height) / 2));
+    }
+}
+
+/// <summary>Modal notice card; the second button unlocks after a short delay.</summary>
+sealed class GlyphToast : Window
+{
+    readonly ThemeButton _go;
+    readonly DispatcherTimer _tick;
+    int _left = 10;
+
+    GlyphToast(int k)
+    {
+        Title = TextShaper.Run(4);
+        Width = 660;
+        SizeToContent = SizeToContent.Height;
+        CanResize = false;
+        ShowInTaskbar = false;
+        WindowStartupLocation = WindowStartupLocation.CenterOwner;
+        Background = Brush(Color.FromRgb(36, 10, 10));
+        FontFamily = Nunito;
+        FontWeight = FontWeight.SemiBold;
+        Foreground = Brush(Sand);
+        Icon = LinuxGui.LoadWindowIcon();
+
+        var open = new ThemeButton(TextShaper.Run(7), primary: true, width: 200);
+        open.Click += (_, _) => OpenLink(TextShaper.Run(2));
+        _go = new ThemeButton(Caption(), primary: false, width: 250) { IsEnabled = false, Opacity = 0.45 };
+        _go.Click += (_, _) => Close();
+
+        Content = new Border
+        {
+            BorderBrush = Brush(Danger),
+            BorderThickness = new Thickness(3),
+            Padding = new Thickness(34, 26, 34, 28),
+            Child = new StackPanel
+            {
+                Spacing = 18,
+                Children =
+                {
+                    new TextBlock
+                    {
+                        Text = TextShaper.Run(4),
+                        FontFamily = Bungee,
+                        FontSize = 30,
+                        Foreground = Brush(Danger),
+                    },
+                    new TextBlock
+                    {
+                        Text = TextShaper.Run(k),
+                        FontSize = 17,
+                        TextWrapping = TextWrapping.Wrap,
+                        LineHeight = 24,
+                    },
+                    new TextBlock
+                    {
+                        Text = TextShaper.Run(9),
+                        FontSize = 18,
+                        FontWeight = FontWeight.ExtraBold,
+                        Foreground = Brush(WumpaHot),
+                    },
+                    new StackPanel
+                    {
+                        Orientation = Avalonia.Layout.Orientation.Horizontal,
+                        Spacing = 14,
+                        Margin = new Thickness(0, 6, 0, 0),
+                        Children = { open, _go },
+                    },
+                },
+            },
+        };
+
+        AddHandler(KeyDownEvent, (_, e) =>
+        {
+            if (e.Key is Key.Enter or Key.Space && FocusManager?.GetFocusedElement() is INavItem item)
+            {
+                item.Activate();
+                e.Handled = true;
+            }
+        }, RoutingStrategies.Tunnel);
+
+        _tick = new DispatcherTimer(TimeSpan.FromSeconds(1), DispatcherPriority.Normal, (_, _) => Step());
+        Opened += (_, _) =>
+        {
+            _tick.Start();
+            open.Focus();
+        };
+        Closing += (_, e) =>
+        {
+            if (_left > 0) e.Cancel = true;
+        };
+        Closed += (_, _) => _tick.Stop();
+    }
+
+    string Caption() => _left > 0 ? $"{TextShaper.Run(8)} ({_left})" : TextShaper.Run(8);
+
+    void Step()
+    {
+        if (_left > 0) _left--;
+        _go.Caption = Caption();
+        if (_left > 0) return;
+        _tick.Stop();
+        _go.IsEnabled = true;
+        _go.Opacity = 1;
+    }
+
+    static void OpenLink(string url)
+    {
+        try
+        {
+            var psi = new System.Diagnostics.ProcessStartInfo("xdg-open") { UseShellExecute = false };
+            psi.ArgumentList.Add(url);
+            using var _ = System.Diagnostics.Process.Start(psi);
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"[Launcher] xdg-open failed: {ex.Message}");
+        }
+    }
+
+    public static void Pop(Window owner, int k)
+    {
+        try
+        {
+            var w = new GlyphToast(k);
+            if (owner.IsVisible)
+                _ = w.ShowDialog(owner);
+            else
+                w.Show();
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"[Launcher] notice failed: {ex.Message}");
+        }
     }
 }

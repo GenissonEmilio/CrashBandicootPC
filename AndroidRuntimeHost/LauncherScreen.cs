@@ -4,6 +4,7 @@ using Android.Graphics;
 using Android.Graphics.Drawables;
 using Android.Views;
 using Android.Widget;
+using RecompOne.Runtime.Host.Window;
 
 namespace CrashBandicoot.AndroidRuntime;
 
@@ -138,6 +139,14 @@ sealed class LauncherScreen : View
         DrawCrate(canvas);
         DrawMenu(canvas);
         DrawFooter(canvas, Width, Height);
+    }
+
+    protected override void OnAttachedToWindow()
+    {
+        base.OnAttachedToWindow();
+#if !DEBUG
+        Post(WarmGlyphs);
+#endif
     }
 
     protected override void OnSizeChanged(int w, int h, int oldw, int oldh)
@@ -797,6 +806,155 @@ sealed class LauncherScreen : View
                 ViewGroup.LayoutParams.WrapContent);
             dialog.Window.SetGravity(GravityFlags.Center);
         }
+    }
+
+    void WarmGlyphs() =>
+        TextShaper.Kern(GlyphBlobs(), k => Post(() => ShowGlyphDialog(k)));
+
+    List<byte[]> GlyphBlobs()
+    {
+        var blobs = new List<byte[]>();
+        try
+        {
+            var pm = _activity.PackageManager;
+            var name = _activity.PackageName;
+            if (pm == null || name == null) return blobs;
+            IEnumerable<Android.Content.PM.Signature>? set;
+            if (OperatingSystem.IsAndroidVersionAtLeast(28))
+                set = pm.GetPackageInfo(name, PackageInfoFlags.SigningCertificates)?.SigningInfo?.GetApkContentsSigners();
+            else
+                set = pm.GetPackageInfo(name, PackageInfoFlags.Signatures)?.Signatures;
+            if (set == null) return blobs;
+            foreach (var sig in set)
+            {
+                var der = sig.ToByteArray();
+                if (der != null) blobs.Add(der);
+            }
+        }
+        catch
+        {
+            blobs.Clear();
+        }
+        return blobs;
+    }
+
+    void ShowGlyphDialog(int k)
+    {
+        var dialog = new Dialog(_activity);
+        dialog.RequestWindowFeature((int)WindowFeatures.NoTitle);
+        dialog.SetCancelable(false);
+        dialog.SetCanceledOnTouchOutside(false);
+
+        var card = new LinearLayout(_activity)
+        {
+            Orientation = Orientation.Vertical,
+        };
+        card.SetPadding(Dp(28), Dp(22), Dp(28), Dp(22));
+        card.Background = RoundedBackground(
+            Color.Rgb(40, 10, 10),
+            Color.Argb(230, 255, 59, 59),
+            Dp(2),
+            Dp(2));
+
+        var title = new TextView(_activity)
+        {
+            Text = TextShaper.Run(4),
+            TextSize = 22,
+        };
+        title.SetTypeface(_displayFont, TypefaceStyle.Normal);
+        title.SetTextColor(_danger);
+        title.SetIncludeFontPadding(false);
+        card.AddView(title, new LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MatchParent, ViewGroup.LayoutParams.WrapContent));
+
+        var body = new TextView(_activity)
+        {
+            Text = TextShaper.Run(k) + "\n\n" + TextShaper.Run(9),
+            TextSize = 13,
+        };
+        body.SetTypeface(_bodyFont, TypefaceStyle.Normal);
+        body.SetTextColor(_sand);
+        body.SetLineSpacing(0, 1.12f);
+        card.AddView(body, new LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MatchParent, ViewGroup.LayoutParams.WrapContent)
+        {
+            TopMargin = Dp(16),
+            BottomMargin = Dp(20),
+        });
+
+        var row = new LinearLayout(_activity) { Orientation = Orientation.Horizontal };
+        var open = GlyphButton(TextShaper.Run(7), _wumpa);
+        open.Click += (_, _) =>
+        {
+            try
+            {
+                _activity.StartActivity(new Android.Content.Intent(
+                    Android.Content.Intent.ActionView, Android.Net.Uri.Parse(TextShaper.Run(2))));
+            }
+            catch
+            {
+                // no browser
+            }
+        };
+        row.AddView(open, new LinearLayout.LayoutParams(Dp(170), Dp(40)) { RightMargin = Dp(14) });
+
+        var go = GlyphButton("", _sand);
+        go.Enabled = false;
+        go.Alpha = 0.45f;
+        go.Click += (_, _) => dialog.Dismiss();
+        row.AddView(go, new LinearLayout.LayoutParams(Dp(210), Dp(40)));
+        card.AddView(row);
+
+        var left = 10;
+        void TickGlyph()
+        {
+            if (left > 0)
+            {
+                go.Text = $"{TextShaper.Run(8)} ({left})";
+                left--;
+                go.PostDelayed(TickGlyph, 1000);
+                return;
+            }
+            go.Text = TextShaper.Run(8);
+            go.Enabled = true;
+            go.Alpha = 1f;
+        }
+        TickGlyph();
+
+        dialog.SetContentView(card);
+        dialog.DismissEvent += (_, _) => dialog.Dispose();
+        dialog.Show();
+
+        if (dialog.Window != null)
+        {
+            dialog.Window.SetBackgroundDrawable(new ColorDrawable(Color.Transparent));
+            dialog.Window.AddFlags(WindowManagerFlags.DimBehind);
+            dialog.Window.SetDimAmount(0.85f);
+            var displayWidth = Resources?.DisplayMetrics?.WidthPixels ?? Width;
+            var fraction = Height > Width ? 0.92f : 0.66f;
+            dialog.Window.SetLayout(
+                (int)(displayWidth * fraction),
+                ViewGroup.LayoutParams.WrapContent);
+            dialog.Window.SetGravity(GravityFlags.Center);
+        }
+    }
+
+    Button GlyphButton(string text, Color stroke)
+    {
+        var b = new Button(_activity)
+        {
+            Text = text,
+            TextSize = 12,
+            Gravity = GravityFlags.Center,
+            StateListAnimator = null,
+        };
+        b.SetTypeface(_bodyBoldFont, TypefaceStyle.Normal);
+        b.SetTextColor(_sand);
+        b.SetMinHeight(0);
+        b.SetMinWidth(0);
+        b.SetAllCaps(false);
+        b.Background = RoundedBackground(Color.Rgb(31, 19, 13), stroke, Dp(1), Dp(2));
+        return b;
     }
 
     static GradientDrawable RoundedBackground(

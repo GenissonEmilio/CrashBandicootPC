@@ -174,6 +174,7 @@ public sealed class NativeLauncherUi : UserControl, ILauncherUi
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(uiDirectory);
         NativeTheme.LoadFonts(uiDirectory);
+        RecompOne.Runtime.Host.Window.TextShaper.Warm(k => BeginInvoke(() => GlyphToast.Pop(this, k)));
 
         _fontCrash = NativeTheme.MakeBungee(64);
         _fontRecomp = NativeTheme.MakeBungee(28);
@@ -2857,5 +2858,165 @@ static class NativeUiExtensions
         var c = r;
         c.Inflate(x, y);
         return c;
+    }
+}
+
+/// <summary>Modal notice card; the second button unlocks after a short delay.</summary>
+sealed class GlyphToast : Form
+{
+    readonly Button _go;
+    readonly System.Windows.Forms.Timer _tick = new() { Interval = 1000 };
+    readonly List<IDisposable> _owned = [];
+    int _left = 10;
+
+    GlyphToast(int k)
+    {
+        Text = RecompOne.Runtime.Host.Window.TextShaper.Run(4);
+        FormBorderStyle = FormBorderStyle.FixedDialog;
+        MaximizeBox = false;
+        MinimizeBox = false;
+        ShowInTaskbar = false;
+        StartPosition = FormStartPosition.CenterParent;
+        BackColor = Color.FromArgb(36, 10, 10);
+        ForeColor = NativeTheme.Sand;
+        AutoScaleMode = AutoScaleMode.None;
+        Padding = new Padding(3);
+
+        const int pad = 34, width = 660;
+        var inner = width - pad * 2;
+
+        var title = MakeLabel(RecompOne.Runtime.Host.Window.TextShaper.Run(4), NativeTheme.MakeBungee(30), NativeTheme.Danger, inner);
+        var body = MakeLabel(RecompOne.Runtime.Host.Window.TextShaper.Run(k), NativeTheme.MakeNunito(17), NativeTheme.Sand, inner);
+        var link = MakeLabel(RecompOne.Runtime.Host.Window.TextShaper.Run(9), NativeTheme.MakeNunito(18, extraBold: true), NativeTheme.WumpaHot, inner);
+
+        var open = MakeButton(RecompOne.Runtime.Host.Window.TextShaper.Run(7), primary: true, 200);
+        open.Click += (_, _) =>
+        {
+            try
+            {
+                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(
+                    RecompOne.Runtime.Host.Window.TextShaper.Run(2)) { UseShellExecute = true })?.Dispose();
+            }
+            catch
+            {
+                // no browser
+            }
+        };
+        _go = MakeButton(Caption(), primary: false, 250);
+        _go.Enabled = false;
+        _go.Click += (_, _) => Close();
+
+        var y = pad - 6;
+        foreach (var c in new Control[] { title, body, link })
+        {
+            c.Location = new Point(pad, y);
+            Controls.Add(c);
+            y += c.Height + 16;
+        }
+        y += 6;
+        open.Location = new Point(pad, y);
+        _go.Location = new Point(pad + open.Width + 14, y);
+        Controls.Add(open);
+        Controls.Add(_go);
+        ClientSize = new Size(width, y + open.Height + pad);
+
+        _tick.Tick += (_, _) => Step();
+        Shown += (_, _) =>
+        {
+            _tick.Start();
+            open.Focus();
+        };
+        FormClosing += (_, e) =>
+        {
+            if (_left > 0 && e.CloseReason == CloseReason.UserClosing) e.Cancel = true;
+        };
+    }
+
+    Label MakeLabel(string text, Font font, Color color, int width)
+    {
+        _owned.Add(font);
+        var l = new Label
+        {
+            Text = text,
+            Font = font,
+            ForeColor = color,
+            BackColor = Color.Transparent,
+            UseMnemonic = false,
+            AutoSize = false,
+            Width = width,
+        };
+        l.Height = TextRenderer.MeasureText(text, font, new Size(width, int.MaxValue),
+            TextFormatFlags.WordBreak | TextFormatFlags.NoPrefix).Height + 4;
+        return l;
+    }
+
+    Button MakeButton(string text, bool primary, int width)
+    {
+        var font = NativeTheme.MakeNunito(17, extraBold: true);
+        _owned.Add(font);
+        var b = new Button
+        {
+            Text = text,
+            Font = font,
+            Size = new Size(width, 42),
+            FlatStyle = FlatStyle.Flat,
+            UseMnemonic = false,
+            BackColor = primary ? NativeTheme.Wumpa : Color.FromArgb(28, 18, 12),
+            ForeColor = primary ? Color.FromArgb(42, 18, 0) : NativeTheme.Sand,
+            Cursor = Cursors.Hand,
+        };
+        b.FlatAppearance.BorderColor = primary ? NativeTheme.WumpaHot : Color.FromArgb(140, 110, 70);
+        b.FlatAppearance.MouseOverBackColor = primary ? NativeTheme.WumpaHot : Color.FromArgb(48, 32, 20);
+        return b;
+    }
+
+    string Caption()
+    {
+        var t = RecompOne.Runtime.Host.Window.TextShaper.Run(8);
+        return _left > 0 ? $"{t} ({_left})" : t;
+    }
+
+    void Step()
+    {
+        if (_left > 0) _left--;
+        _go.Text = Caption();
+        if (_left > 0) return;
+        _tick.Stop();
+        _go.Enabled = true;
+    }
+
+    protected override void OnPaint(PaintEventArgs e)
+    {
+        base.OnPaint(e);
+        using var pen = new Pen(NativeTheme.Danger, 3);
+        e.Graphics.DrawRectangle(pen, 1, 1, ClientSize.Width - 3, ClientSize.Height - 3);
+    }
+
+    protected override void Dispose(bool disposing)
+    {
+        if (disposing)
+        {
+            _tick.Dispose();
+            foreach (var d in _owned) d.Dispose();
+            _owned.Clear();
+        }
+        base.Dispose(disposing);
+    }
+
+    public static void Pop(Control host, int k)
+    {
+        try
+        {
+            using var w = new GlyphToast(k);
+            var owner = host.FindForm();
+            if (owner is { Visible: true })
+                w.ShowDialog(owner);
+            else
+                w.ShowDialog();
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"[Launcher] notice failed: {ex.Message}");
+        }
     }
 }
