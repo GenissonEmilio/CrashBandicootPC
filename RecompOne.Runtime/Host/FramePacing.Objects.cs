@@ -647,6 +647,7 @@ public static partial class FramePacing
         // HUD / flying icons are screen-space. Lerping rot+trans of Tawna's
         // portrait between 30 Hz poses swings it across the top of the frame.
         if (IsNativeWideHudObject(m, obj, out _)) return;
+        if (IsBossHealthSprite(m, obj)) return;
         if (_exactTicks >= RefTicks - 0.01) return;
 
         if (!TryGetGatePhase(m, obj, out double acc)) return;
@@ -702,6 +703,26 @@ public static partial class FramePacing
         catch
         {
             RestoreGatedDisplayRot(m, obj);
+        }
+    }
+
+    /// <summary>
+    /// ShadC <c>Boss_Health</c> spawns at SetTrans(-209, 70), waits out the
+    /// intro cutscene, then SETs its HUD y (Papu Papu -75). The gated lerp
+    /// from 70 showed the portrait mid-left for one gate (#169). Screen-space
+    /// like DispC; world shadows (no FLAG_2D) keep the lerp.
+    /// </summary>
+    static bool IsBossHealthSprite(IMemory m, uint obj)
+    {
+        try
+        {
+            return TryReadGoolClass(m, obj, out uint type, out _)
+                && type == GoolTypeShad
+                && (m.ReadU32(obj + ObjStatusBOff) & Flag2D) != 0;
+        }
+        catch
+        {
+            return false;
         }
     }
 

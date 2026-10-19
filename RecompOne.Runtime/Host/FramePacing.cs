@@ -445,6 +445,11 @@ public static partial class FramePacing
     const uint GoolCategoryPlatform = 0x600u;
     /// <summary>DispC lives / fruit / Tawna pickup HUD. Not world FLAG_2D (mist, torches).</summary>
     const uint GoolTypeDisp = 4u;
+    /// <summary>
+    /// ShadC: world shadows, plus the FLAG_2D boss portrait / hit points
+    /// (<c>Boss_Health</c>, <c>Boss_Health_Point</c>).
+    /// </summary>
+    const uint GoolTypeShad = 29u;
     /// <summary>BoxC / crate GOOL header type (NTSC-U entity type 0x22).</summary>
     const uint GoolTypeBox = 0x22u;
     /// <summary>BoxsC <c>Box_Break</c> / <c>Box_Break_Reward</c> (same index in every region).</summary>
