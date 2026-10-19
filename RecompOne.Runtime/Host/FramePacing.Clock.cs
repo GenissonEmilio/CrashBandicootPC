@@ -191,6 +191,7 @@ public static partial class FramePacing
         _haveObj = false;
         _crashObj = false;
         _crashHog = false;
+        ClearHogCam();
         _hogPathFrac = 0;
         _hogTrotFracX = 0;
         _hogTrotFracY = 0;
@@ -362,6 +363,7 @@ public static partial class FramePacing
         _waterDoneThisLoop = false;
         _frameTimeReady = false;
         _ticksTakenThisLoop = false;
+        _hogGateReady = false;
     }
 
     // Camera, world effects and objects consume the same wall-time interval.

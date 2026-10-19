@@ -29,6 +29,8 @@ public static partial class FramePacing
         if (_didPreUpdateObjects) return true;
         _didPreUpdateObjects = true;
         _crashDidScale = false;
+        // Worlds are drawn; objects use GfxUpdateMatrices' cam_trans_prev copy.
+        RestoreHogCamPose(m);
         if (UnstickPause(m))
             c.A0 = 1;
         NotePauseClock(m);
@@ -169,6 +171,13 @@ public static partial class FramePacing
             // Run one original 34-tick update per 34 wall ticks; still draw.
             // First frame always runs so box_link / stall init is not delayed.
             // A crate break waits for the next gate (see IsCrateBreakStep).
+            if (DeferHogNewborn(m))
+            {
+                // Not drawn yet either: the original shows it from that frame on.
+                _newObjs.Add(c.A0);
+                c.V0 = GoolSuccess;
+                return false;
+            }
             if (IsFirstFrame(m, _obj) && !crateBreak)
             {
                 LagCrashStampForEntity(m, _obj);
@@ -426,6 +435,8 @@ public static partial class FramePacing
             m.WriteU32(PauseObjAddr, 0);
         }
         catch { /* overlay swap */ }
+        RestoreHogCamPose(m);
+        ClearHogCam();
         _hogPathFrac = 0;
         _hogTrotFracX = 0;
         _hogTrotFracY = 0;

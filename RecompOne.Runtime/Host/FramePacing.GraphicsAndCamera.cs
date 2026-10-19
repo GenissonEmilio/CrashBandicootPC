@@ -73,6 +73,7 @@ public static partial class FramePacing
                 ClearDeathCam();
         }
         catch { /* overlay swap */ }
+        ApplyHogCamPose(m);
         ApplyResetCarry(m);
         AdvanceWater(m);
         SpawnNativeWidePickups(c, m);
@@ -326,7 +327,8 @@ public static partial class FramePacing
         DropNativeWidePickupsOnZoneChange(c, m);
         CamTraceLevelUpdate(c);
         EnsureFrameTime(m);
-        if (!IsActive(m) || _exactTicks >= RefTicks - 0.01 || c.RA == CamFollowSnapRa)
+        RestoreHogCamPose(m);
+        if (!IsActive(m) || _exactTicks >= RefTicks - 0.01 || c.RA == CamFollowSnapRa || _hogCamFullStep)
         {
             _cameraProgressFrac = 0;
             return true;
@@ -365,6 +367,20 @@ public static partial class FramePacing
         CamTraceBegin(m);
         EnsureFrameTime(m);
         _inCamFollow = false;
+        _hogCamFullStep = false;
+        RestoreHogCamPose(m);
+        if (HogCamFollow(m, c.A0, out bool runHog))
+        {
+            _cameraSeekFrac.Clear();
+            if (!runHog)
+            {
+                CamTraceEnd(m);
+                return false;
+            }
+            // PreGoolSeek must not scale the zoom/pan seeks of this full step.
+            _inCamFollow = true;
+            return true;
+        }
         if (!IsActive(m) || _exactTicks >= RefTicks - 0.01)
         {
             _cameraSeekFrac.Clear();
@@ -387,6 +403,13 @@ public static partial class FramePacing
 
     public static void PostCamFollow(CpuContext c, IMemory m)
     {
+        if (_hogCamFullStep)
+        {
+            _inCamFollow = false;
+            EndHogCamFollow(m);
+            CamTraceEnd(m);
+            return;
+        }
         if (!_inCamFollow)
         {
             CamTraceEnd(m);
@@ -414,6 +437,7 @@ public static partial class FramePacing
     /// </summary>
     public static bool PreCamDeath(CpuContext c, IMemory m)
     {
+        RestoreHogCamPose(m);
         if (!IsActive(m))
         {
             ClearDeathCam();
