@@ -288,6 +288,7 @@ sealed partial class LauncherWindow
         var saveLives = Nav(new ThemeCheck("Save lives to memory card") { Checked = view.SaveLives });
         var analogMovement = Nav(new ThemeCheck("Analog movement (left stick)") { Checked = view.AnalogMovement });
         var boxCounter = Nav(new ThemeCheck("Box counter") { Checked = view.BoxCounter });
+        var singleBoxDrop = Nav(new ThemeCheck("Japanese box drop (one box)") { Checked = view.SingleBoxDrop });
 
         var strengthRow = Row(Label("Filter strength", 202), strength, 30);
         void SyncStrength() => strengthRow.IsVisible = ComboValue(texFilter, 0) != 0;
@@ -346,7 +347,9 @@ sealed partial class LauncherWindow
                     WithMargin(analogMovement, new Thickness(0, 0, 0, 14)),
                     Hint("The gamepad left stick steers Crash in any direction, not only the 8 of the D-pad. D-pad and keyboard are unchanged."),
                     WithMargin(boxCounter, new Thickness(0, 0, 0, 14)),
-                    Hint("Shows boxes broken / boxes needed for the gem in the corner during levels. Turns gray when a death loses the gem: Crash 1 forgets the boxes broken before the last checkpoint.", 8),
+                    Hint("Shows boxes broken / boxes needed for the gem in the corner during levels. Turns gray when a death loses the gem: Crash 1 forgets the boxes broken before the last checkpoint."),
+                    WithMargin(singleBoxDrop, new Thickness(0, 0, 0, 14)),
+                    Hint("At the level end, after a run without deaths, only one box drops on Crash for the boxes you missed, like the Japanese version. The number still shows how many you missed. Off: one box per missed box, as in the original.", 8),
                 },
             },
         ];
@@ -382,6 +385,7 @@ sealed partial class LauncherWindow
             view.SaveLives = saveLives.Checked;
             view.AnalogMovement = analogMovement.Checked;
             view.BoxCounter = boxCounter.Checked;
+            view.SingleBoxDrop = singleBoxDrop.Checked;
             ConfigManager.SaveGame();
             SaveView();
             CloseSheet();

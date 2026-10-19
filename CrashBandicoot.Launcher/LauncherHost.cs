@@ -226,6 +226,7 @@ public sealed class LauncherHost : Form
             saveLives = ConfigManager.View.SaveLives,
             analogMovement = ConfigManager.View.AnalogMovement,
             boxCounter = ConfigManager.View.BoxCounter,
+            singleBoxDrop = ConfigManager.View.SingleBoxDrop,
             infiniteLives = CheatConfig.InfiniteLives,
             levelSelect = CheatConfig.LevelSelect,
             godMode = CheatConfig.GodMode,
@@ -684,6 +685,8 @@ public sealed class LauncherHost : Form
             ConfigManager.View.AnalogMovement = am.GetBoolean();
         if (root.TryGetProperty("boxCounter", out var bc))
             ConfigManager.View.BoxCounter = bc.GetBoolean();
+        if (root.TryGetProperty("singleBoxDrop", out var sbd))
+            ConfigManager.View.SingleBoxDrop = sbd.GetBoolean();
 
         ConfigManager.SaveGame();
         // Persist Fullscreen etc. without touching ImGui layout (empty panel list

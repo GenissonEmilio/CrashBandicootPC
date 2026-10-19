@@ -84,6 +84,14 @@ internal sealed class DisplaySettingsSection : ISettingsSection
         }
         ImGui.TextDisabled("Boxes broken / boxes needed for the gem, in the corner");
 
+        bool singleDrop = ConfigManager.View.SingleBoxDrop;
+        if (ImGui.Checkbox("Japanese box drop (one box)", ref singleDrop))
+        {
+            ConfigManager.View.SingleBoxDrop = singleDrop;
+            ConfigManager.SaveView(PanelManager.Panels);
+        }
+        ImGui.TextDisabled("Level end: one box drops for all missed boxes, like NTSC-J");
+
         bool vsync = ConfigManager.View.VSync;
         if (ImGui.Checkbox("VSync", ref vsync))
         {

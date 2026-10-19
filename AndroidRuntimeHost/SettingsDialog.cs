@@ -113,6 +113,11 @@ static class SettingsDialog
             "Shows boxes broken / boxes needed for the gem in the corner during levels. Turns gray when a death loses the gem: Crash 1 forgets the boxes broken before the last checkpoint.",
             bodyFont));
 
+        var singleBoxDrop = AddSwitch(activity, card, "Japanese box drop (one box)", view.SingleBoxDrop, bodyBold);
+        card.AddView(Hint(activity,
+            "At the level end, after a run without deaths, only one box drops on Crash for the boxes you missed, like the Japanese version. The number still shows how many you missed. Off: one box per missed box, as in the original.",
+            bodyFont));
+
         if (gpuLabRequested != null)
         {
             card.AddView(Hint(activity, "Diagnostics", bodyBold), Margin(activity, top: 10, bottom: 2));
@@ -172,6 +177,7 @@ static class SettingsDialog
             view.SaveLives = saveLives.Checked;
             view.AnalogMovement = analogMovement.Checked;
             view.BoxCounter = boxCounter.Checked;
+            view.SingleBoxDrop = singleBoxDrop.Checked;
 
             ConfigManager.SaveGame();
             ConfigManager.SaveView(Array.Empty<RecompOne.Runtime.Host.Window.IPanel>());

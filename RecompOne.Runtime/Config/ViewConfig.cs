@@ -377,4 +377,15 @@ public class ViewConfig
         get => GetBool("BoxCounter");
         set => SetBool("BoxCounter", value);
     }
+
+    /// <summary>
+    /// Japanese level end (#170): after a deathless run with missed boxes, only one
+    /// box drops on Crash, and the counter shows the missed count at once. Off by
+    /// default (NTSC-U: one box per missed box).
+    /// </summary>
+    public bool SingleBoxDrop
+    {
+        get => GetBool("SingleBoxDrop");
+        set => SetBool("SingleBoxDrop", value);
+    }
 }

@@ -110,6 +110,7 @@ public static partial class FramePacing
         RestorePadSpin(m);
         RestoreCrashStamp(m);
         _inCrashUpdate = false;
+        NoteBoxDropUpdate(c.A0);
         // Hold / NSInit run GOOL with pacing off. Hoppers Wait then Jump
         // (may OR SOLID_TOP). If we do not record them here, unlock treats
         // them as pillars and i+=1 runs every present until Crash dies and
@@ -279,6 +280,7 @@ public static partial class FramePacing
                 RestorePadSpin(m);
                 return;
             case GoolObjectUpdateAddr:
+                ApplySingleBoxDrop(m);
                 RestorePadSpin(m);
                 RestoreCrashStamp(m);
                 _inCrashUpdate = false;
