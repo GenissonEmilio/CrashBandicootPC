@@ -580,6 +580,8 @@ public static partial class FramePacing
     struct BoundSnap
     {
         public int X1, Y1, Z1, X2, Y2, Z2;
+        /// <summary>GemsC only: Bound ran in physics, after trans (box at Q).</summary>
+        public bool AtQ;
     }
 
     struct GatePose

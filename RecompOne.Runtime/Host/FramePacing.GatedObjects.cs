@@ -397,7 +397,8 @@ public static partial class FramePacing
                     Z1 = (int)m.ReadU32(slot + 8),
                     X2 = (int)m.ReadU32(slot + 12),
                     Y2 = (int)m.ReadU32(slot + 16),
-                    Z2 = (int)m.ReadU32(slot + 20)
+                    Z2 = (int)m.ReadU32(slot + 20),
+                    AtQ = GemBoundAfterTrans(m, obj)
                 };
                 // Real update frames need the same collision pose as skipped
                 // frames. The stored snapshot remains at the authored start.
@@ -897,7 +898,13 @@ public static partial class FramePacing
             return;
         if (!_gateRot.TryGetValue(obj, out GatePose g)) return;
         int bx, by, bz;
-        if (fromSnap)
+        if (fromSnap && GemSnapAtQ(obj))
+        {
+            bx = g.Qx;
+            by = g.Qy;
+            bz = g.Qz;
+        }
+        else if (fromSnap)
         {
             bx = g.Px;
             by = g.Py;
@@ -920,6 +927,28 @@ public static partial class FramePacing
         m.WriteU32(slot + 16, (uint)((int)m.ReadU32(slot + 16) + dy));
         m.WriteU32(slot + 20, (uint)((int)m.ReadU32(slot + 20) + dz));
     }
+
+    /// <summary>
+    /// GemsC (#146): GoolObjectUpdate runs Bound before trans only when the
+    /// stamp it just wrote equals Crash's (Crash updates after entities, so
+    /// his stamp is still the one it compared). Otherwise Bound ran in
+    /// physics, after trans, and the box is at Q, not P.
+    /// </summary>
+    static bool GemBoundAfterTrans(IMemory m, uint obj)
+    {
+        if (!TryReadGoolClass(m, obj, out uint type, out _) || type != GoolTypeGems)
+            return false;
+        if (!TryReadCrash(m, out uint crash)) return false;
+        return m.ReadU32(obj + ObjAnimStampOff) != m.ReadU32(crash + ObjAnimStampOff);
+    }
+
+    /// <summary>
+    /// Shifting a Q box by visual − P put the gem's ride solid one 30 Hz step
+    /// ahead: Crash climbed above the lift, lost the floor when its step
+    /// shrank, and the airborne interpret sent <c>pathprog</c> back (#146).
+    /// </summary>
+    static bool GemSnapAtQ(uint obj)
+        => _lastBound.TryGetValue(obj, out BoundSnap snap) && snap.AtQ;
 
     static void LogObjectClass(IMemory m, uint obj)
     {

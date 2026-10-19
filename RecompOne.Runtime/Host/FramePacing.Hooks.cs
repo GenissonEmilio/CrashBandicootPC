@@ -596,7 +596,9 @@ public static partial class FramePacing
             if ((b & FlagSolidTop) == 0) return;
             uint crash = m.ReadU32(CrashPtrAddr);
             if (crash == 0 || (crash & 0xFF000000u) != 0x80000000u) return;
-            if (!CrashStandingOnPlat(m, obj, crash) || CrashLeftRide(m, obj, crash)) return;
+            bool standing = CrashStandingOnPlat(m, obj, crash)
+                || (type == GoolTypeGems && CrashGroundedOnGem(m, obj, crash));
+            if (!standing || CrashLeftRide(m, obj, crash)) return;
             m.WriteU32(obj + ObjColliderOff, crash);
             if (_platColLog >= 8) return;
             _platColLog++;
@@ -664,7 +666,31 @@ public static partial class FramePacing
         return CrashOnPlatPos(m, obj, crash, vx, vy, vz);
     }
 
-    static bool CrashOnPlatPos(IMemory m, uint plat, uint crash, int px, int py, int pz)
+    /// <summary>
+    /// GemsC (#146): the ride only goes forward while <c>collider</c> is a
+    /// grounded Crash; any other interpret seeks <c>pathprog</c> back. Crash can
+    /// stand up to one 30 Hz step above the gem's Q: a hitch present
+    /// (dt &gt;= 34) gave him the full carry while the drawn lerp kept its
+    /// leftover, and on a reversing gem he stands on the solid of the last
+    /// step. The <see cref="EmbedSlop"/> test then failed every interpret, the
+    /// gem slid back, Crash fell behind it, and it never climbed again
+    /// (Lights Out gem lift stuck near its start).
+    /// </summary>
+    static bool CrashGroundedOnGem(IMemory m, uint gem, uint crash)
+    {
+        if ((m.ReadU32(crash + ObjStatusAOff) & FlagGroundLand) == 0) return false;
+        if (!_gateRot.TryGetValue(gem, out GatePose pose)) return false;
+        int step = Math.Abs(pose.Qy - pose.Py);
+        if (step > VelTeleport) return false;
+        return CrashOnPlatPos(m, gem, crash,
+            (int)m.ReadU32(gem + ObjTransOff),
+            (int)m.ReadU32(gem + ObjTransOff + 4),
+            (int)m.ReadU32(gem + ObjTransOff + 8),
+            EmbedSlop + step);
+    }
+
+    static bool CrashOnPlatPos(IMemory m, uint plat, uint crash, int px, int py, int pz,
+        int slop = EmbedSlop)
     {
         int cy = (int)m.ReadU32(crash + ObjTransOff + 4);
         if (cy - py <= -HalfMeter) return false;
@@ -673,10 +699,13 @@ public static partial class FramePacing
         {
             // Use the same transformed bound as floor collision. Raw object
             // bounds do not include the leaf's scale/rotation.
-            int dx = px - pose.Px, dy = py - pose.Py, dz = pz - pose.Pz;
+            bool atQ = GemSnapAtQ(plat);
+            int dx = px - (atQ ? pose.Qx : pose.Px);
+            int dy = py - (atQ ? pose.Qy : pose.Py);
+            int dz = pz - (atQ ? pose.Qz : pose.Pz);
             int bottom = cy + Math.Min((int)m.ReadU32(crash + ObjBoundOff + 4),
                 (int)m.ReadU32(crash + ObjBoundOff + 16));
-            if (bottom > Math.Max(bound.Y1, bound.Y2) + dy + EmbedSlop) return false;
+            if (bottom > Math.Max(bound.Y1, bound.Y2) + dy + slop) return false;
             int contactX = (int)m.ReadU32(crash + ObjTransOff);
             int contactZ = (int)m.ReadU32(crash + ObjTransOff + 8);
             int x1 = contactX + (int)m.ReadU32(crash + ObjBoundOff);
@@ -690,7 +719,7 @@ public static partial class FramePacing
         }
         int platTop = py + Math.Max((int)m.ReadU32(plat + ObjBoundOff + 4), (int)m.ReadU32(plat + ObjBoundOff + 16));
         int crashBottom = cy + Math.Min((int)m.ReadU32(crash + ObjBoundOff + 4), (int)m.ReadU32(crash + ObjBoundOff + 16));
-        if (crashBottom > platTop + EmbedSlop) return false;
+        if (crashBottom > platTop + slop) return false;
         int cx = (int)m.ReadU32(crash + ObjTransOff);
         int cz = (int)m.ReadU32(crash + ObjTransOff + 8);
         return AabbOverlapXzAt(m, plat, px, pz, crash, cx, cz);
