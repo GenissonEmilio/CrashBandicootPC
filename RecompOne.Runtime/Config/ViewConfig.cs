@@ -388,4 +388,15 @@ public class ViewConfig
         get => GetBool("SingleBoxDrop");
         set => SetBool("SingleBoxDrop", value);
     }
+
+    /// <summary>
+    /// Story intro on New Game (#171): New Game plays the intro cutscene (retail:
+    /// attract demo only) before the map, like Crash 2 and 3. Start skips it. Off by
+    /// default.
+    /// </summary>
+    public bool IntroOnNewGame
+    {
+        get => GetBool("IntroOnNewGame");
+        set => SetBool("IntroOnNewGame", value);
+    }
 }

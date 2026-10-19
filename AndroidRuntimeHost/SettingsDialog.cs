@@ -118,6 +118,11 @@ static class SettingsDialog
             "At the level end, after a run without deaths, only one box drops on Crash for the boxes you missed, like the Japanese version. The number still shows how many you missed. Off: one box per missed box, as in the original.",
             bodyFont));
 
+        var introOnNewGame = AddSwitch(activity, card, "Story intro on New Game", view.IntroOnNewGame, bodyBold);
+        card.AddView(Hint(activity,
+            "New Game plays the story cutscene before the map, like Crash 2 and 3. Start skips it. Off: the intro only plays when you wait on the title screen, as in the original.",
+            bodyFont));
+
         if (gpuLabRequested != null)
         {
             card.AddView(Hint(activity, "Diagnostics", bodyBold), Margin(activity, top: 10, bottom: 2));
@@ -178,6 +183,7 @@ static class SettingsDialog
             view.AnalogMovement = analogMovement.Checked;
             view.BoxCounter = boxCounter.Checked;
             view.SingleBoxDrop = singleBoxDrop.Checked;
+            view.IntroOnNewGame = introOnNewGame.Checked;
 
             ConfigManager.SaveGame();
             ConfigManager.SaveView(Array.Empty<RecompOne.Runtime.Host.Window.IPanel>());

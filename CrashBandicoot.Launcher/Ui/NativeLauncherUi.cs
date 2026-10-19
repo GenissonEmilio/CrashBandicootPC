@@ -106,6 +106,7 @@ public sealed class NativeLauncherUi : UserControl, ILauncherUi
     ThemeCheck? _analogMovement;
     ThemeCheck? _boxCounter;
     ThemeCheck? _singleBoxDrop;
+    ThemeCheck? _introOnNewGame;
     ThemeCheck? _cheatLives;
     ThemeCheck? _cheatLevel;
     ThemeCheck? _cheatGod;
@@ -306,6 +307,7 @@ public sealed class NativeLauncherUi : UserControl, ILauncherUi
         SetCheck(_analogMovement, state, "analogMovement");
         SetCheck(_boxCounter, state, "boxCounter");
         SetCheck(_singleBoxDrop, state, "singleBoxDrop");
+        SetCheck(_introOnNewGame, state, "introOnNewGame");
         SetCheck(_cheatLives, state, "infiniteLives");
         SetCheck(_cheatLevel, state, "levelSelect");
         SetCheck(_cheatGod, state, "godMode");
@@ -1591,6 +1593,12 @@ public sealed class NativeLauncherUi : UserControl, ILauncherUi
         y += 52;
         AddHint("At the level end, after a run without deaths, only one box drops on Crash for the boxes you missed, like the Japanese version. The number still shows how many you missed. Off: one box per missed box, as in the original.");
 
+        _introOnNewGame = MakeCheck("Story intro on New Game");
+        _introOnNewGame.Location = new Point(12, y);
+        page.Controls.Add(_introOnNewGame);
+        y += 52;
+        AddHint("New Game plays the story cutscene before the map, like Crash 2 and 3. Start skips it. Off: the intro only plays when you wait on the title screen, as in the original.");
+
         // Scroll extent = last control + a small margin (no empty hint gap at the end).
         foreach (var p in pages)
             p.AutoScrollMinSize = new Size(0, p.Controls.Cast<Control>().Max(c => c.Bottom) + 12);
@@ -1617,6 +1625,7 @@ public sealed class NativeLauncherUi : UserControl, ILauncherUi
                 analogMovement = _analogMovement?.Checked ?? false,
                 boxCounter = _boxCounter?.Checked ?? false,
                 singleBoxDrop = _singleBoxDrop?.Checked ?? false,
+                introOnNewGame = _introOnNewGame?.Checked ?? false,
             });
             CloseSheet();
         };

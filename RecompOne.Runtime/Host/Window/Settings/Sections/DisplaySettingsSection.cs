@@ -92,6 +92,14 @@ internal sealed class DisplaySettingsSection : ISettingsSection
         }
         ImGui.TextDisabled("Level end: one box drops for all missed boxes, like NTSC-J");
 
+        bool intro = ConfigManager.View.IntroOnNewGame;
+        if (ImGui.Checkbox("Story intro on New Game", ref intro))
+        {
+            ConfigManager.View.IntroOnNewGame = intro;
+            ConfigManager.SaveView(PanelManager.Panels);
+        }
+        ImGui.TextDisabled("New Game plays the story cutscene first, like Crash 2 and 3");
+
         bool vsync = ConfigManager.View.VSync;
         if (ImGui.Checkbox("VSync", ref vsync))
         {

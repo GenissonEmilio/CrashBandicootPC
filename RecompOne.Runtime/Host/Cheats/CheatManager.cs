@@ -114,6 +114,9 @@ public static class CheatManager
     static uint _bonusLid = uint.MaxValue;
     static uint _bonusRound;
     static bool _bonusArmed;
+    // Level the last NSInit loaded. cur_lid can't tell at NSInit: NSKill's TitleKill
+    // (func_80032298) has already zeroed it. Refreshed every frame for save states.
+    static uint _loadedLid = uint.MaxValue;
 
     public static bool WarpPending => _warpPending || _bonusLid != uint.MaxValue;
 
@@ -174,6 +177,11 @@ public static class CheatManager
     {
         var mem = Runtime.Mem;
         if (mem == null) return;
+
+        // 0 = cleared by TitleKill between NSKill and NSInit: keep the level being left.
+        uint curLid = mem.ReadU32(LevelIdAddr);
+        if (curLid != 0)
+            _loadedLid = curLid;
 
         if (_warpPending)
             ApplyWarp(mem);
@@ -263,7 +271,8 @@ public static class CheatManager
     }
 
     /// <summary>
-    /// NSInit pre-hook: A1 is the level about to load, cur_lid still the one being left.
+    /// NSInit pre-hook: A1 is the level about to load. cur_lid is already 0 here
+    /// (TitleKill), so the level being left is <see cref="_loadedLid"/>.
     /// </summary>
     public static void OnLevelLoad(CpuContext c, IMemory m)
     {
@@ -287,12 +296,14 @@ public static class CheatManager
         // Third Cortex token in Stormy Ascent: SelectBonusRound has no branch for it,
         // so loadlevel(BonusLevel) reads a stale field (NSInit on garbage = retail crash).
         // Map, level end and a restart are the only loads the level makes on its own.
-        if (m.ReadU32(LevelIdAddr) == LidStormyAscent && !warp
+        if (_loadedLid == LidStormyAscent && !warp
             && lid is not (LidMap or LidLevelEnd or LidStormyAscent))
         {
             c.A1 = LidBonusBrio;
             m.WriteU32(BonusRoundAddr, StormyBonusRound);
         }
+        // After the redirect: a second hook run for the same NSInit leaves it alone.
+        _loadedLid = c.A1;
 
         // The level end screen still needs slot 34 (gem bit); the map does not.
         if (lid == LidMap && IsNodelessMapLevel(m.ReadU32(CurMapLevelAddr)))

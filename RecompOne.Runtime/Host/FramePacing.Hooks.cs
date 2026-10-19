@@ -385,6 +385,7 @@ public static partial class FramePacing
         // drawn lerp. FinishPacedScale may have used last present's t.
         RideAfterCrash(m);
         PaceFade(m);
+        NoteIntroOnNewGame(m);
         if (_levelReady && !_loggedUnlockGpu)
         {
             _loggedUnlockGpu = true;
@@ -404,6 +405,7 @@ public static partial class FramePacing
     {
         // May redirect A1 (Stormy Ascent bonus) — before the log below.
         Cheats.CheatManager.OnLevelLoad(c, m);
+        IntroOnNewGameLevelLoad(c, m);
         RestoreNativeWideObjectFrustum(m);
         ResetNativeWideRenderer();
         // NSInit rebuilds the object pool; nothing left to terminate.
