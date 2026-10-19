@@ -10,15 +10,20 @@
 #        CrashBandicoot-<version>.apk
 #   4. Puts them in a DRAFT release, tag <version> (no "v", the official-build
 #      check looks the tag up by version). Write the notes, then press Publish.
+#   5. On Publish, sends CrashBandicoot.exe to VirusTotal and adds its badge
+#      under the title of the release notes. To redo only this step, run the
+#      workflow with the version and "Only VirusTotal" ticked.
 #
 # Running it again for a version that is still a draft rebuilds the files and
 # replaces them. A version that is already published is refused.
 #
-# One-time setup: the APK must be signed with signing/android-release.keystore
-# (the official-build check knows its certificate). Store it as two repository
-# secrets, from the repo root in Git Bash:
-#   base64 -w0 signing/android-release.keystore | gh secret set ANDROID_KEYSTORE_BASE64
+# One-time setup, from the repo root (cmd or Git Bash). The APK must be signed
+# with signing/android-release.keystore (the official-build check knows its
+# certificate), so it is stored as two repository secrets:
+#   python -c "import base64;print(base64.b64encode(open('signing/android-release.keystore','rb').read()).decode())" | gh secret set ANDROID_KEYSTORE_BASE64
 #   gh secret set ANDROID_KEYSTORE_PROPERTIES < signing/keystore.properties
+# VirusTotal API key (virustotal.com > profile > API key), pasted when asked:
+#   gh secret set VIRUSTOTAL_API_KEY
 name: Release
 
 on:
@@ -27,17 +32,24 @@ on:
       version:
         description: 'Version (for example 2.3)'
         required: true
+      virustotal_only:
+        description: 'Only VirusTotal: scan an already published release and update its badge'
+        type: boolean
+        default: false
+  release:
+    types: [published]
 
 permissions:
   contents: read
 
 concurrency:
-  group: release
+  group: release-${{ github.event_name }}
   cancel-in-progress: false
 
 jobs:
   version:
     name: Set version
+    if: github.event_name == 'workflow_dispatch' && !inputs.virustotal_only
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -87,6 +99,7 @@ jobs:
     # dependency (GLFW, SDL, OpenAL, Skia, HarfBuzz, rabbitizer) already ships
     # linux-arm64 in its package.
     name: Build linux-arm64 natives
+    if: github.event_name == 'workflow_dispatch' && !inputs.virustotal_only
     # Ubuntu 22.04 = glibc 2.35. GLFW and OpenAL already need glibc 2.34, so
     # this adds no stricter requirement in practice (checked below).
     runs-on: ubuntu-22.04-arm
@@ -334,3 +347,117 @@ jobs:
             gh release create "$V" dist/* --draft --title "$V" --target "$SHA" --generate-notes
           fi
           echo "Draft release: $(gh release view "$V" --json url --jq .url)"
+
+  virustotal:
+    # Runs when a release is published (and by hand with "Only VirusTotal").
+    # A release made by GitHub's own token would not start it: that is why the
+    # draft has to be published by hand.
+    name: VirusTotal badge
+    if: github.event_name == 'release' || inputs.virustotal_only
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: write
+    env:
+      TAG: ${{ github.event_name == 'release' && github.event.release.tag_name || inputs.version }}
+      VT_API_KEY: ${{ secrets.VIRUSTOTAL_API_KEY }}
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+    steps:
+      - name: Scan CrashBandicoot.exe and add the badge
+        run: |
+          set -euo pipefail
+          if [ -z "$VT_API_KEY" ]; then
+            echo "::error::Secret VIRUSTOTAL_API_KEY is missing. See the one-time setup at the top of release.yml."
+            exit 1
+          fi
+          VT_API="https://www.virustotal.com/api/v3"
+          EXE=/tmp/vt/CrashBandicoot.exe
+
+          # Free API key: 4 requests a minute. Retry on rate limit / busy.
+          vt_request() {
+            local method="$1" url="$2" attempt http_code=""
+            shift 2
+            for attempt in 1 2 3 4 5; do
+              http_code=$(curl -sS -o /tmp/vt_response.json -w "%{http_code}" \
+                -X "$method" -H "Accept: application/json" -H "x-apikey: $VT_API_KEY" "$@" "$url")
+              if [ "$http_code" = "429" ] || [ "$http_code" = "503" ]; then
+                echo "VirusTotal busy (HTTP $http_code), retry $attempt/5..." >&2
+                sleep $((attempt * 20))
+                continue
+              fi
+              echo "$http_code"
+              return 0
+            done
+            echo "VirusTotal request failed after retries (last HTTP $http_code)" >&2
+            cat /tmp/vt_response.json >&2 || true
+            exit 1
+          }
+
+          gh release download "$TAG" -p CrashBandicoot.exe -D /tmp/vt --clobber
+          SHA256=$(sha256sum "$EXE" | awk '{print $1}')
+          echo "CrashBandicoot.exe $TAG: sha256 $SHA256, $(stat -c%s "$EXE") bytes"
+
+          HTTP_CODE=$(vt_request GET "$VT_API/files/$SHA256")
+          if [ "$HTTP_CODE" = "404" ]; then
+            # Files over 32 MB (ours are ~65 MB) need a one-time upload URL.
+            HTTP_CODE=$(vt_request GET "$VT_API/files/upload_url")
+            [ "$HTTP_CODE" = "200" ] || { echo "upload_url failed (HTTP $HTTP_CODE)"; cat /tmp/vt_response.json; exit 1; }
+            UPLOAD_URL=$(jq -r '.data' /tmp/vt_response.json)
+            echo "Uploading to VirusTotal..."
+            HTTP_CODE=$(vt_request POST "$UPLOAD_URL" --form "file=@$EXE")
+            [ "$HTTP_CODE" = "200" ] || { echo "Upload failed (HTTP $HTTP_CODE)"; cat /tmp/vt_response.json; exit 1; }
+            ANALYSIS_ID=$(jq -r '.data.id' /tmp/vt_response.json)
+
+            for attempt in $(seq 1 60); do
+              sleep 15
+              vt_request GET "$VT_API/analyses/$ANALYSIS_ID" >/dev/null
+              STATUS=$(jq -r '.data.attributes.status // "unknown"' /tmp/vt_response.json)
+              echo "Analysis $attempt/60: $STATUS"
+              [ "$STATUS" = "completed" ] && break
+            done
+
+            sleep 15
+            HTTP_CODE=$(vt_request GET "$VT_API/files/$SHA256")
+          fi
+          [ "$HTTP_CODE" = "200" ] || { echo "File report failed (HTTP $HTTP_CODE)"; cat /tmp/vt_response.json; exit 1; }
+
+          # Same count as the VirusTotal page: engines that gave a verdict.
+          read -r DETECTIONS TOTAL < <(jq -r '.data.attributes.last_analysis_stats
+            | "\((.malicious // 0) + (.suspicious // 0)) \((.malicious // 0) + (.suspicious // 0) + (.undetected // 0) + (.harmless // 0))"' \
+            /tmp/vt_response.json)
+          echo "Detections: $DETECTIONS/$TOTAL"
+          if [ "$DETECTIONS" -eq 0 ]; then
+            COLOR=brightgreen; LABEL="${DETECTIONS}/${TOTAL}%20Safe"
+          elif [ "$DETECTIONS" -le 2 ]; then
+            COLOR=yellow; LABEL="${DETECTIONS}/${TOTAL}%20Detections"
+          else
+            COLOR=red; LABEL="${DETECTIONS}/${TOTAL}%20Detections"
+          fi
+          export BADGE="[![VirusTotal ${DETECTIONS}/${TOTAL}](https://img.shields.io/badge/VirusTotal-${LABEL}-${COLOR}?style=flat-square&logo=virustotal)](https://www.virustotal.com/gui/file/${SHA256})"
+          export BODY="$(gh release view "$TAG" --json body --jq .body)"
+
+          # Badge goes right under the "# ..." title line (or on top if there is
+          # none). The markers let a second run replace it instead of adding one.
+          python3 <<'PY'
+          import os
+
+          start, end = "<!-- vt-badge-start -->", "<!-- vt-badge-end -->"
+          section = f"{start}\n**Windows (CrashBandicoot.exe):** {os.environ['BADGE']}\n{end}"
+          body = os.environ.get("BODY", "")
+
+          if start in body and end in body:
+              before, rest = body.split(start, 1)
+              body = before + section + rest.split(end, 1)[1]
+          elif body.startswith("# "):
+              title, _, rest = body.partition("\n")
+              body = f"{title}\n\n{section}\n\n{rest.lstrip()}"
+          else:
+              body = f"{section}\n\n{body.lstrip()}"
+
+          with open("/tmp/notes.md", "w", encoding="utf-8") as fh:
+              fh.write(body)
+          PY
+
+          gh release edit "$TAG" --notes-file /tmp/notes.md
+          echo "Badge added to release $TAG."
