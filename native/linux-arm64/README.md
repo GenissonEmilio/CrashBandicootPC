@@ -9,6 +9,8 @@
 
 Their NuGet packages ship no linux-arm64 build; every other native dependency does.
 
-Both files come only from this repository's own workflow, `.github/workflows/linux-arm64-natives.yml` (Actions > **linux-arm64 natives** > **Run workflow**). It builds them on `ubuntu-22.04-arm` and checks that they export the same C functions as the linux-x64 libraries in the NuGet packages. Copy `libcimgui.so` and `libnfd.so` from its `linux-arm64-natives` artifact into this folder. `SOURCES.txt` in the artifact records the run, the commits and the SHA-256 of each file.
+Both files come only from this repository's own workflow, `.github/workflows/release.yml` (Actions > **Release** > **Run workflow**). Its first job builds them on `ubuntu-22.04-arm` and checks that they export the same C functions as the linux-x64 libraries in the NuGet packages; the linux-arm64 build then takes them from there. They are not committed.
+
+For a local `publish_release.py --platform linux-arm64`, copy `libcimgui.so` and `libnfd.so` from the `linux-arm64-natives` artifact of a Release run into this folder. `SOURCES.txt` in the artifact records the run, the commits and the SHA-256 of each file.
 
 Never put libraries built by anyone else here.

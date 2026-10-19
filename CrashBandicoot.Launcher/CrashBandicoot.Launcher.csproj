@@ -76,7 +76,7 @@
   </ItemGroup>
 
   <!-- linux-arm64 (Raspberry Pi 4/5, issue #165): ImGui.NET and NativeFileDialogSharp
-       ship no arm64 natives. .github/workflows/linux-arm64-natives.yml builds them from
+       ship no arm64 natives. .github/workflows/release.yml builds them from
        the upstream sources into native/linux-arm64/; the single-file bundles them. -->
   <ItemGroup Condition="'$(RuntimeIdentifier)' == 'linux-arm64'">
     <None Include="..\native\linux-arm64\libcimgui.so;..\native\linux-arm64\libnfd.so"

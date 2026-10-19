@@ -9,11 +9,15 @@ Usage (from repo root):
     python publish_release.py --platform android
     python publish_release.py --platform all
     python publish_release.py --rid linux-x64  # legacy RID flag (Windows/Linux only)
+    python publish_release.py --set-version 2.3  # write 2.3 into every version field
 
 Requires: .NET 10 SDK. Android also needs the Android SDK + a release keystore
 (created automatically on first Android publish into signing/, gitignored).
 linux-arm64 also needs native/linux-arm64/libcimgui.so and libnfd.so, built by
-the "linux-arm64 natives" GitHub workflow (see native/linux-arm64/README.md).
+the "Release" GitHub workflow (see native/linux-arm64/README.md).
+
+Normal releases are built on GitHub: Actions > Release > Run workflow
+(.github/workflows/release.yml), which uses --set-version and --platform.
 """
 
 from __future__ import annotations
@@ -61,8 +65,24 @@ PLATFORM_RID = {
 
 ALL_PLATFORMS = ["windows", "linux", "linux-arm64", "android"]
 
-# ImGui.NET and NativeFileDialogSharp ship no linux-arm64 natives. Our own
-# workflow (.github/workflows/linux-arm64-natives.yml) builds them; the
+# Every place that holds the app version (the "2.2" commit touched exactly
+# these). Each pattern must match once: a moved or renamed field stops the
+# release instead of shipping a build with an old version.
+VERSION_FIELDS = (
+    (PROJECT, r"(<Version>)[^<]*(</Version>)", "{v}"),
+    (PROJECT, r"(<AssemblyVersion>)[^<]*(</AssemblyVersion>)", "{v4}"),
+    (PROJECT, r"(<FileVersion>)[^<]*(</FileVersion>)", "{v4}"),
+    (PROJECT, r"(<InformationalVersion>)[^<]*(</InformationalVersion>)", "{v}"),
+    (ANDROID_PROJECT, r"(<ApplicationDisplayVersion>)[^<]*(</ApplicationDisplayVersion>)", "{v}"),
+    (ROOT / "CrashBandicoot.Launcher" / "LauncherHost.cs", r'(public const string AppVersion = ")[^"]*(")', "{v}"),
+    (ROOT / "CrashBandicoot.Launcher" / "Ui" / "NativeLauncherUi.cs", r'(string _version = "v)[^"]*(")', "{v}"),
+    (ROOT / "CrashBandicoot.Launcher" / "Linux" / "LinuxGui.cs", r'(<summary>"v)[^"]*(" from the assembly version)', "{v}"),
+    (ROOT / "RecompOne.Runtime" / "Host" / "Window" / "AppVersion.cs", r'(public const string Version = ")[^"]*(")', "{v}"),
+)
+ANDROID_VERSION_CODE = r"(<ApplicationVersion>)(\d+)(</ApplicationVersion>)"
+
+# ImGui.NET and NativeFileDialogSharp ship no linux-arm64 natives. The
+# "Release" workflow (.github/workflows/release.yml) builds them; the
 # launcher csproj packs them into the linux-arm64 single-file.
 ARM64_NATIVE_DIR = ROOT / "native" / "linux-arm64"
 ARM64_NATIVES = ("libcimgui.so", "libnfd.so")
@@ -104,6 +124,50 @@ def app_version() -> str:
     if not match:
         die(f"could not read <Version> from {PROJECT.name}")
     return match.group(1).strip()
+
+
+def set_version(version: str) -> None:
+    """Write version into every field in VERSION_FIELDS (the old manual "2.2" commit).
+
+    The Android versionCode goes up by one whenever the display version changes,
+    so a new APK always installs over the previous one.
+    """
+    if not re.fullmatch(r"\d+(\.\d+){1,3}", version):
+        die(f"version {version!r} must look like 2.3 or 2.3.1")
+    v4 = ".".join((version.split(".") + ["0", "0", "0"])[:4])
+
+    # Bytes in, bytes out: keeps each file's BOM and line endings.
+    texts: dict[Path, str] = {}
+    for path, _, _ in VERSION_FIELDS:
+        if path not in texts:
+            if not path.is_file():
+                die(f"version file missing: {path}")
+            texts[path] = path.read_bytes().decode("utf-8")
+    before = dict(texts)
+
+    for path, pattern, value in VERSION_FIELDS:
+        new = value.format(v=version, v4=v4)
+        text, count = re.subn(pattern, lambda m: m.group(1) + new + m.group(2), texts[path])
+        if count != 1:
+            die(f"{path.relative_to(ROOT)}: expected 1 match for {pattern!r}, found {count}")
+        texts[path] = text
+
+    if texts[ANDROID_PROJECT] != before[ANDROID_PROJECT]:
+        text, count = re.subn(
+            ANDROID_VERSION_CODE,
+            lambda m: m.group(1) + str(int(m.group(2)) + 1) + m.group(3),
+            texts[ANDROID_PROJECT],
+        )
+        if count != 1:
+            die(f"{ANDROID_PROJECT.name}: expected 1 <ApplicationVersion>, found {count}")
+        texts[ANDROID_PROJECT] = text
+
+    changed = [path for path in texts if texts[path] != before[path]]
+    for path in changed:
+        path.write_bytes(texts[path].encode("utf-8"))
+        print(f"[publish] version {version} -> {path.relative_to(ROOT)}")
+    if not changed:
+        print(f"[publish] every version field already says {version}")
 
 
 def _png_size(png: bytes) -> tuple[int, int]:
@@ -250,9 +314,9 @@ def check_arm64_natives() -> None:
         return
     die(
         f"{ARM64_NATIVE_DIR.relative_to(ROOT)}: " + "; ".join(problems) + ".\n"
-        "  On GitHub: Actions > 'linux-arm64 natives' > Run workflow, then copy\n"
-        "  libcimgui.so and libnfd.so from its 'linux-arm64-natives' artifact into\n"
-        f"  {ARM64_NATIVE_DIR}\n"
+        "  The GitHub 'Release' workflow builds them on its own. For a local build,\n"
+        "  copy libcimgui.so and libnfd.so from the 'linux-arm64-natives' artifact\n"
+        f"  of a Release run into {ARM64_NATIVE_DIR}\n"
         "  (or publish the other platforms one at a time)."
     )
 
@@ -691,7 +755,16 @@ def main() -> None:
         action="store_true",
         help="create the Android upload keystore if missing, then exit",
     )
+    ap.add_argument(
+        "--set-version",
+        metavar="VERSION",
+        help="write VERSION (e.g. 2.3) into every version field, then exit",
+    )
     args = ap.parse_args()
+
+    if args.set_version:
+        set_version(args.set_version)
+        return
 
     if args.init_keystore:
         require_dotnet()
