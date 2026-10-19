@@ -514,6 +514,8 @@ public static partial class FramePacing
     const uint GoolTypePoOb = 14u;
     /// <summary>PoObC <c>Conveyor</c>. Trans does <c>collider-&gt;x = spd(...)</c>, no wall test.</summary>
     const uint StatePoObConveyor = 3;
+    /// <summary>PoObC <c>Power_Spring</c> (idle; trans bounces <c>collider</c> when above).</summary>
+    const uint StatePoObSpring = 0;
     /// <summary>0.5 m. Wait/Active carry tests <c>player.y - y &gt; -0.5m</c>.</summary>
     const int HalfMeter = 0xC800;
     /// <summary>NTSC-U <c>s</c> / <c>t</c> — only lids with PoPlC 70deg + 0.985 carry.</summary>

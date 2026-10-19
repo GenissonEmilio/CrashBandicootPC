@@ -84,6 +84,17 @@ public static partial class FramePacing
         catch { return false; }
     }
 
+    static bool IsPoObSpring(IMemory m, uint obj)
+    {
+        if ((obj & 0xFF000000u) != 0x80000000u) return false;
+        try
+        {
+            return TryReadGoolClass(m, obj, out uint type, out _) && type == GoolTypePoOb
+                && m.ReadU32(obj + ObjStateOff) == StatePoObSpring;
+        }
+        catch { return false; }
+    }
+
     static void NoteCrateFlight(IMemory m, uint obj)
     {
         try
@@ -184,10 +195,16 @@ public static partial class FramePacing
     /// only gets the belt touch from Crash's own physics (PlotObjWalls), which
     /// a dead Crash no longer runs. It also let two overlapping belts both
     /// push him (double speed); PlotObjWalls keeps only the nearest one.
+    /// Heavy Machinery springs (#149): <c>Power_Spring</c> trans bounces
+    /// <c>collider</c>, the touch Crash's floor test wrote the frame before.
+    /// Same-stamp Bound tests the AABBs instead, and Crash standing on top
+    /// does not overlap the spring, so it cleared collider and he stood
+    /// on the spring without a bounce in that gate phase.
     /// </summary>
     static void LagCrashStampForEntity(IMemory m, uint obj)
     {
-        if (_crashStampLagged || !(IsBoxObj(m, obj) || IsPoObConveyor(m, obj))
+        if (_crashStampLagged
+            || !(IsBoxObj(m, obj) || IsPoObConveyor(m, obj) || IsPoObSpring(m, obj))
             || !TryReadCrash(m, out uint crash)) return;
         try
         {
