@@ -324,20 +324,22 @@ public static partial class FramePacing
     /// </summary>
     public static bool PreLevelUpdate(CpuContext c, IMemory m)
     {
-        DropNativeWidePickupsOnZoneChange(c, m);
         CamTraceLevelUpdate(c);
         EnsureFrameTime(m);
         RestoreHogCamPose(m);
         if (!IsActive(m) || _exactTicks >= RefTicks - 0.01 || c.RA == CamFollowSnapRa || _hogCamFullStep)
         {
             _cameraProgressFrac = 0;
+            DropNativeWidePickupsOnZoneChange(c, m);
             return true;
         }
         try
         {
             if (c.A0 != m.ReadU32(CamZoneAddr) || c.A1 != m.ReadU32(CamPathAddr))
             {
-                _cameraProgressFrac = 0;
+                if (c.RA != CamAdjustRa || !PaceCamPathChange(c, m))
+                    _cameraProgressFrac = 0;
+                DropNativeWidePickupsOnZoneChange(c, m);
                 return true;
             }
             if (_cameraProgressZone != c.A0 || _cameraProgressPath != c.A1)
@@ -354,6 +356,56 @@ public static partial class FramePacing
         {
             // zone swap
         }
+        return true;
+    }
+
+    /// <summary>
+    /// CamAdjustProgress catch-up that runs off the end (or start) of the
+    /// path continues on the next path with the leftover of a full 30 Hz
+    /// cam_speed step. Unscaled, that present jumped a whole step (2× at 60
+    /// FPS) and cut the lag, so the next cam_speed = lag/2 + 0x100 dropped
+    /// ~30% and ramped back: a hitch at every path seam of long falls and
+    /// spring launches (#83 Castle Machinery). Keep dt/34 of the step: stay
+    /// on the old path if that part does not reach its end, else enter the
+    /// new path minus the unspent rest. Returns true when A0-A2 were paced.
+    /// </summary>
+    static bool PaceCamPathChange(CpuContext c, IMemory m)
+    {
+        uint oldPath = m.ReadU32(CamPathAddr);
+        uint newPath = c.A1;
+        if ((oldPath & 0xFF000000u) != 0x80000000u || (newPath & 0xFF000000u) != 0x80000000u)
+            return false;
+        int speed = (int)m.ReadU32(CamSpeedAddr);
+        if (speed <= 0 || speed > PathWrap)
+            return false;
+        int cur = (int)m.ReadU32(CamProgressAddr);
+        int oldEnd = m.ReadU16(oldPath + ZonePathLengthOff) << 8;
+        bool forward = cur + speed >= oldEnd;
+        bool backward = cur - speed < 0;
+        if (forward == backward)
+        {
+            if (!forward) return false;
+            forward = cur >= oldEnd / 2;
+        }
+        if (_cameraProgressZone != m.ReadU32(CamZoneAddr) || _cameraProgressPath != oldPath)
+            _cameraProgressFrac = 0;
+        int kept = KeepCrashDelta(0, speed, PathWrap, ref _cameraProgressFrac);
+        if (forward ? cur + kept < oldEnd : cur - kept >= 0)
+        {
+            c.A0 = m.ReadU32(CamZoneAddr);
+            c.A1 = oldPath;
+            c.A2 = (uint)(forward ? cur + kept : cur - kept);
+            _cameraProgressZone = c.A0;
+            _cameraProgressPath = oldPath;
+            return true;
+        }
+        int newEnd = (m.ReadU16(newPath + ZonePathLengthOff) << 8) - 1;
+        int req = (int)c.A2;
+        int rest = speed - kept;
+        int paced = req <= newEnd / 2 ? req - rest : req + rest;
+        c.A2 = (uint)Math.Clamp(paced, 0, Math.Max(newEnd, 0));
+        _cameraProgressZone = c.A0;
+        _cameraProgressPath = newPath;
         return true;
     }
 

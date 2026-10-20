@@ -320,6 +320,10 @@ public static partial class FramePacing
     /// Crash's projected progress. CamAdjustProgress catch-up returns to 0x8002A0B4.
     /// </summary>
     const uint CamFollowSnapRa = 0x8002B210u;
+    /// <summary>RA of CamAdjustProgress's <c>LevelUpdate</c> (same path and path-change steps).</summary>
+    const uint CamAdjustRa = 0x8002A0B4u;
+    /// <summary>zone_path <c>length</c> (u16, path points).</summary>
+    const uint ZonePathLengthOff = 0x1Eu;
     const uint CamOffsetZAddr = 0x800564A4u;
     const uint CamZoomAddr = 0x800564A8u;
     const uint CamOffsetYAddr = 0x800564B4u;

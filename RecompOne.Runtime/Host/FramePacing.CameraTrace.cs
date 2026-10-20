@@ -83,7 +83,7 @@ public static partial class FramePacing
                 : (_ctRa switch
                 {
                     CamFollowSnapRa => "snap",
-                    0x8002A0B4u => "adj",
+                    CamAdjustRa => "adj",
                     _ => $"{_ctRa:X8}"
                 }) + ":" + _ctReq.ToString(CultureInfo.InvariantCulture);
             string crashTxt = "-";
