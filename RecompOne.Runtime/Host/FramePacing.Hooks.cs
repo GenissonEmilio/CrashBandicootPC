@@ -238,6 +238,8 @@ public static partial class FramePacing
             ArmSpawnBurst(m, c.A0);
         if (_haveObj && !_crashObj)
             TryFillTemplePlatCollider(m, c.A0);
+        if (_solidObj)
+            FillTurtleShellTouch(m, c.A0);
         return true;
     }
 

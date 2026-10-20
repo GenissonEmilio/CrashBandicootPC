@@ -95,6 +95,55 @@ public static partial class FramePacing
         catch { return false; }
     }
 
+    static bool IsTurtleShell(IMemory m, uint obj)
+    {
+        if ((obj & 0xFF000000u) != 0x80000000u) return false;
+        try
+        {
+            return TryReadGoolClass(m, obj, out uint type, out _) && type == GoolTypeTurt
+                && m.ReadU32(obj + ObjStateOff) == StateTurtleShell;
+        }
+        catch { return false; }
+    }
+
+    /// <summary>Turtle shell: gate interprets in a row that saw Crash's touch.</summary>
+    static readonly Dictionary<uint, int> _turtleTouch = new();
+
+    /// <summary>
+    /// Turtle shell bounce (#145). Crash touches the shell on his landing
+    /// frame and again on the bounce frame (that floor test sends
+    /// EventJumpedOn). Original: two 30 Hz frames, so the shell trans reads
+    /// <c>collider</c> twice and squashes twice (scale y 0.9). Unlocked, those
+    /// two touches are two presents a few ms apart. When no gate falls
+    /// between them the shell reads one touch and squashes only to 0.95.
+    /// Every other bounce looked half as deep at 60 FPS. A touch read by a
+    /// single gate gets the second read the original gives it.
+    /// </summary>
+    static void FillTurtleShellTouch(IMemory m, uint obj)
+    {
+        if (!IsTurtleShell(m, obj) || !TryReadCrash(m, out uint crash)) return;
+        try
+        {
+            if (m.ReadU32(obj + ObjColliderOff) == crash)
+            {
+                _turtleTouch[obj] = Math.Min(_turtleTouch.GetValueOrDefault(obj) + 1, 2);
+                EvictDictDown(_turtleTouch, obj, ObjectPoolMax);
+                return;
+            }
+            if (_turtleTouch.GetValueOrDefault(obj) == 1)
+            {
+                m.WriteU32(obj + ObjColliderOff, crash);
+                _turtleTouch[obj] = 2;
+                return;
+            }
+            _turtleTouch.Remove(obj);
+        }
+        catch
+        {
+            // object freed
+        }
+    }
+
     static void NoteCrateFlight(IMemory m, uint obj)
     {
         try
@@ -200,11 +249,16 @@ public static partial class FramePacing
     /// Same-stamp Bound tests the AABBs instead, and Crash standing on top
     /// does not overlap the spring, so it cleared collider and he stood
     /// on the spring without a bounce in that gate phase.
+    /// Turtle shells (#145): <c>Turtle_Shell</c> trans squashes the shell
+    /// (<c>scaley -= 0.05</c>) only while <c>collider</c> is Crash above it.
+    /// Same-stamp Bound cleared that touch, so the bounce squash was missing
+    /// or smaller than at 30 FPS, depending on the gate phase.
     /// </summary>
     static void LagCrashStampForEntity(IMemory m, uint obj)
     {
         if (_crashStampLagged
-            || !(IsBoxObj(m, obj) || IsPoObConveyor(m, obj) || IsPoObSpring(m, obj))
+            || !(IsBoxObj(m, obj) || IsPoObConveyor(m, obj) || IsPoObSpring(m, obj)
+                || IsTurtleShell(m, obj))
             || !TryReadCrash(m, out uint crash)) return;
         try
         {
@@ -279,6 +333,7 @@ public static partial class FramePacing
         _simAcc.Remove(obj);
         _gateFrame.Remove(obj);
         _crateFlight.Remove(obj);
+        _turtleTouch.Remove(obj);
         _pathHoppers.Remove(obj);
         _platFrac.Remove(obj);
         if (_rideObj == obj) ClearGatedRide();

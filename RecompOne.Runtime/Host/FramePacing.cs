@@ -516,6 +516,10 @@ public static partial class FramePacing
     const uint StatePoObConveyor = 3;
     /// <summary>PoObC <c>Power_Spring</c> (idle; trans bounces <c>collider</c> when above).</summary>
     const uint StatePoObSpring = 0;
+    /// <summary>TurtC (walking / path / shell turtles).</summary>
+    const uint GoolTypeTurt = 19u;
+    /// <summary>TurtC <c>Turtle_Shell</c>. Trans squashes <c>scaley</c> while <c>collider</c> is Crash above.</summary>
+    const uint StateTurtleShell = 3;
     /// <summary>0.5 m. Wait/Active carry tests <c>player.y - y &gt; -0.5m</c>.</summary>
     const int HalfMeter = 0xC800;
     /// <summary>NTSC-U <c>s</c> / <c>t</c> — only lids with PoPlC 70deg + 0.985 carry.</summary>

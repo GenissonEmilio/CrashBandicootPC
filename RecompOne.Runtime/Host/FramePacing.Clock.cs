@@ -277,6 +277,7 @@ public static partial class FramePacing
         _simAcc.Clear();
         _gateFrame.Clear();
         _crateFlight.Clear();
+        _turtleTouch.Clear();
         _cameraSeekFrac.Clear();
         _cameraProgressFrac = 0;
         _cameraProgressZone = 0;
