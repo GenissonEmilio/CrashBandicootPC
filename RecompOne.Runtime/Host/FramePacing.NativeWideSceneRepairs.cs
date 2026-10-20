@@ -184,8 +184,12 @@ public static partial class FramePacing
         // supplies the other's front end. The gap is 392 units, a cell 400: the
         // copies go behind the scenery (NativeWideToxicEndRoom), the pillar's
         // behind the panel's, so the overlaps keep the original cells.
+        // The other corridor meshes, and the end room's own doorways, get the
+        // chamfers cut past each doorway (NativeWideToxicDoors).
+        var toxicDoors = NativeWideToxicDoors(m, world);
         NativeWideCopies? copies = level == 7 ? NativeWideToxicEndRoom(m, world) ? new(
                 [
+                    .. NativeWideToxicDoorCopies(toxicDoors ?? []),
                     new(new(5600, 27599, -22800), new(5600, 30199, -22392), Vector3.Zero, MirrorX: 8000, MirrorZ: -21800),
                     new(new(5600, 27599, -23200), new(5600, 28599, -22792), Vector3.Zero, MirrorX: 8000, MirrorZ: -21800, Rank: 1),
                     new(new(5600, 28999, -23200), new(5600, 30199, -22792), Vector3.Zero, MirrorX: 8000, MirrorZ: -21800, Rank: 1),
@@ -193,7 +197,7 @@ public static partial class FramePacing
                     new(new(10400, 29799, -23200), new(10400, 30199, -22800), Vector3.Zero, MirrorX: 8000, MirrorZ: -21800, Rank: 1),
                     new(new(10400, 27599, -22800), new(10400, 28199, -22400), Vector3.Zero, MirrorX: 8000, MirrorZ: -21800),
                     new(new(10400, 27599, -23200), new(10400, 28199, -22800), Vector3.Zero, MirrorX: 8000, MirrorZ: -21800, Rank: 1),
-                ], []) : null
+                ], []) : toxicDoors != null ? new([.. NativeWideToxicDoorCopies(toxicDoors)], []) : null
             : level == 9 ? NativeWideBeachCopies(world, (int)m.ReadU32(world.Header),
                 (int)m.ReadU32(world.Header + 8))
             // The Lost City starts at the west end of the temple walkway. Its floor
@@ -312,6 +316,13 @@ public static partial class FramePacing
         if (doorCells != null)
         {
             var door = NativeWideCellRepairs(m, world, doorCells);
+            // Past the doorway, its chamfers go behind the scenery (as in the
+            // other corridor meshes); the cells keep their true depth.
+            if (toxicDoors != null)
+            {
+                for (int i = 0; i < door.Count; i++) door[i] = door[i] with { Boundary = true };
+                door.AddRange(NativeWideCopyRepairs(m, world, new([.. NativeWideToxicDoorCopies(toxicDoors)], [])));
+            }
             PaceLog($"native-wide level={level} cell repairs={door.Count}");
             return _nativeWideSceneryRepairs[key] = door;
         }
