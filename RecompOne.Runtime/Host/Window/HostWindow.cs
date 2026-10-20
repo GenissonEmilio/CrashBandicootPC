@@ -392,13 +392,11 @@ internal static class HostWindow
         {
             if (!ExitToMapInjector.Active)
             {
-                // Single Esc pipeline: Dev Menu, then Settings (back to pause), then pause overlay.
+                // Single Esc pipeline: Dev Menu, then pause (Settings page back to pause first).
                 if (PanelManager.Get<DevMenuPopup>() is { IsOpen: true } dev)
                     dev.HandleEscape();
-                else if (PanelManager.Get<SettingsPopup>() is { IsOpen: true } settings)
-                    settings.IsOpen = false;
                 else if (PanelManager.Get<PauseMenuPopup>() is { } pause)
-                    pause.IsOpen = !pause.IsOpen;
+                    pause.HandleEscape();
             }
         }
         if (InputManager.TryConsumeFrameRateIndex(out int fpsIndex)
@@ -743,7 +741,6 @@ internal static class HostWindow
         PanelManager.Register(new CdDebugPanel());
         PanelManager.Register(new ConsolePanel());
         PanelManager.Register(new OverlayEventsPanel());
-        PanelManager.Register(new SettingsPopup());
         PanelManager.Register(new Modding.ModsPopup());
         PanelManager.Register(new DevMenuPopup());
         PanelManager.Register(new PauseMenuPopup());
@@ -901,7 +898,7 @@ internal static class HostWindow
         // flip DockSpace flags (old code used an invalid 4096 flag when count<=1).
         int contentOpen = PanelManager.Panels.Count(p =>
             p.IsOpen &&
-            p is not AboutPopup and not SettingsPopup and not Modding.ModsPopup
+            p is not AboutPopup and not Modding.ModsPopup
                 and not DiscPickerPopup and not DevMenuPopup and not PauseMenuPopup);
         var dockFlags = ImGuiDockNodeFlags.PassthruCentralNode | ImGuiDockNodeFlags.AutoHideTabBar;
         if (contentOpen <= 1)

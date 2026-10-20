@@ -7,7 +7,8 @@ namespace RecompOne.Runtime.Host.Window;
 
 /// <summary>
 /// ESC pause overlay: resume, settings, open the in-game save/exit flow, or leave the session.
-/// Drawn in the launcher look (<see cref="CrashUi"/>) unless CrashMenuStyle is off.
+/// Drawn in the launcher look (<see cref="CrashUi"/>) unless CrashMenuStyle is off. Settings
+/// is a second page of the same card (<see cref="SettingsView"/>), not a separate window.
 /// </summary>
 internal sealed class PauseMenuPopup : IPanel
 {
@@ -15,9 +16,14 @@ internal sealed class PauseMenuPopup : IPanel
 
     const float MenuWidth = 260f;
     const float CrashWidth = 320f;
+    const float SettingsWidth = 760f;
+    const float SettingsHeight = 520f;
 
     bool _open;
     bool _focusOnce;
+    bool _settingsPage;
+    float _footerHeight;
+    readonly SettingsView _settings = new();
 
     public bool IsOpen
     {
@@ -27,7 +33,17 @@ internal sealed class PauseMenuPopup : IPanel
             if (_open == value) return;
             _open = value;
             _focusOnce = false;
+            _settingsPage = false;
         }
+    }
+
+    /// <summary>Esc: Settings page back to the pause page, otherwise toggle the overlay.</summary>
+    public void HandleEscape()
+    {
+        if (_open && _settingsPage)
+            _settingsPage = false;
+        else
+            IsOpen = !_open;
     }
 
     public void Draw()
@@ -35,14 +51,24 @@ internal sealed class PauseMenuPopup : IPanel
         var vp = ImGui.GetMainViewport();
         float ui = Math.Clamp(ImGui.GetIO().FontGlobalScale, 1f, 2.5f);
         bool crash = CrashUi.Enabled;
-        float width = (crash ? CrashWidth : MenuWidth) * ui;
+        bool settingsPage = _settingsPage;
 
         CrashUi.Backdrop("##pause-dim", vp, ui);
 
-        ImGui.SetNextWindowSize(new Vector2(width, 0f), ImGuiCond.Always);
-        ImGui.SetNextWindowSizeConstraints(
-            new Vector2(width, 0f),
-            new Vector2(width, vp.WorkSize.Y * 0.9f));
+        if (settingsPage)
+        {
+            ImGui.SetNextWindowSize(new Vector2(
+                Math.Min(SettingsWidth * ui, vp.WorkSize.X * 0.95f),
+                Math.Min(SettingsHeight * ui, vp.WorkSize.Y * 0.9f)), ImGuiCond.Always);
+        }
+        else
+        {
+            float width = (crash ? CrashWidth : MenuWidth) * ui;
+            ImGui.SetNextWindowSize(new Vector2(width, 0f), ImGuiCond.Always);
+            ImGui.SetNextWindowSizeConstraints(
+                new Vector2(width, 0f),
+                new Vector2(width, vp.WorkSize.Y * 0.9f));
+        }
         ImGui.SetNextWindowPos(vp.GetCenter(), ImGuiCond.Always, new Vector2(0.5f, 0.5f));
 
         if (!_focusOnce)
@@ -62,8 +88,8 @@ internal sealed class PauseMenuPopup : IPanel
                     | ImGuiWindowFlags.NoResize
                     | ImGuiWindowFlags.NoMove
                     // Auto-fit at fractional UI scales showed an always-full scrollbar.
-                    | ImGuiWindowFlags.NoScrollbar
-                    | ImGuiWindowFlags.AlwaysAutoResize;
+                    | ImGuiWindowFlags.NoScrollbar;
+        if (!settingsPage) flags |= ImGuiWindowFlags.AlwaysAutoResize;
         if (crash) flags |= ImGuiWindowFlags.NoTitleBar;
 
         if (!ImGui.Begin(Name, ref open, flags))
@@ -74,6 +100,14 @@ internal sealed class PauseMenuPopup : IPanel
         }
 
         CrashUi.CardDecor(ui);
+        if (settingsPage)
+        {
+            DrawSettingsPage(ui, crash);
+            IsOpen = open;
+            ImGui.End();
+            return;
+        }
+
         CrashUi.Header("Crash Recompiled", "Paused", ui);
 
         if (CrashUi.Row("Resume", "resume", ui))
@@ -83,10 +117,9 @@ internal sealed class PauseMenuPopup : IPanel
         if (saveStates && DrawSaveStates(ui))
             open = false;
 
-        // Pause stays open behind Settings so gameplay input stays muted; Esc closes Settings first.
-        if (CrashUi.Row("Settings...", "settings", ui)
-            && PanelManager.Get<SettingsPopup>() is { } settings)
-            settings.IsOpen = true;
+        // Settings replaces the rows inside this card, so gameplay input stays muted.
+        if (CrashUi.Row("Settings", "settings", ui))
+            _settingsPage = true;
 
         if (CrashUi.Row("Exit to Map...", "exit-map", ui, enabled: !CheatManager.IsOnTitleMenuMap()))
         {
@@ -135,6 +168,26 @@ internal sealed class PauseMenuPopup : IPanel
 
         IsOpen = open;
         ImGui.End();
+    }
+
+    /// <summary>Settings page: header with back button, sections, key hints.</summary>
+    void DrawSettingsPage(float ui, bool crash)
+    {
+        if (CrashUi.Header("Paused", "Settings", ui, closeButton: true))
+            _settingsPage = false;
+        if (!crash && ImGui.Button("< Back"))
+            _settingsPage = false;
+
+        // Footer height from the last frame keeps the hints pinned to the card bottom.
+        float spacing = ImGui.GetStyle().ItemSpacing.Y;
+        float footer = _footerHeight > 0f ? _footerHeight : 34f * ui;
+        float body = Math.Max(80f * ui, ImGui.GetContentRegionAvail().Y - footer - spacing);
+        _settings.Draw(ui, body);
+
+        float start = ImGui.GetCursorPosY();
+        CrashUi.Divider(ui);
+        CrashUi.Hints(ui, ("Esc", "Back"));
+        _footerHeight = ImGui.GetCursorPosY() - start;
     }
 
     /// <summary>Quick save rows (#130). True when an action should close the menu.</summary>
