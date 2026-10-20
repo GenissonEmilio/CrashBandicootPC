@@ -769,67 +769,255 @@ public static partial class FramePacing
     // polygon (pillar rock, floor) in mirrored tiles at that polygon's texel
     // scale, every corner shaded like the scenery near it (lava glow by the
     // bank, dark purple elsewhere).
+    // The walls stand about 2000 beyond the end pillars, whose lit rock
+    // must still reach the wall foot near the camera.
+    const int NativeWideKoalaLit = 48;
+    const float NativeWideKoalaWallReach = 4500;
     static void NativeWideKoalaWalls(IMemory m, NativeWideWorld world, List<NativeWideRepair> output)
     {
         // Scenery colours, except the grey vertices of self-coloured textures (lava, rails).
+        // The rock walls take only lit vertices (#156): the near floor and the
+        // foot of the end pillars are painted black, and the wall low down by
+        // them turned black too, read as holes between the pillar's rocks.
         var points = new List<(Vector3 Position, Vector3 Colour)>();
+        var lit = new List<(Vector3 Position, Vector3 Colour)>();
         for (int vi = 0; vi < world.VertexCount; vi++)
         {
             var v = ReadNativeWideLocal(m, world, vi);
             if (Math.Abs(v.R - v.G) < 8 && Math.Abs(v.G - v.B) < 8 && v.R > 40) continue;
             points.Add((Position(v), new Vector3(v.R, v.G, v.B)));
+            if (Math.Max(v.R, Math.Max(v.G, v.B)) >= NativeWideKoalaLit)
+                lit.Add((Position(v), new Vector3(v.R, v.G, v.B)));
         }
         // Repair corners are mesh-local: the header holds the mesh translation.
         var local = new Vector3((int)m.ReadU32(world.Header), (int)m.ReadU32(world.Header + 4),
             (int)m.ReadU32(world.Header + 8));
-        NativeWideKoalaPlane(m, world, output, points, 736, new Vector3(-4000, -640, -3840) - local,
-            Vector3.UnitZ, 8960, Vector3.UnitY, 5440);
+        NativeWideKoalaPlane(m, world, output, lit, 736, new Vector3(-4000, -640, -3840) - local,
+            Vector3.UnitZ, 8960, Vector3.UnitY, 5440, NativeWideKoalaWallReach);
         NativeWideKoalaPlane(m, world, output, points, 141, new Vector3(-4000, 0, 1440) - local,
             Vector3.UnitX, 1800, Vector3.UnitZ, 3360);
-        NativeWideKoalaPlane(m, world, output, points, 767, new Vector3(4000, -640, -3840) - local,
-            Vector3.UnitZ, 8960, Vector3.UnitY, 5440);
+        NativeWideKoalaPlane(m, world, output, lit, 767, new Vector3(4000, -640, -3840) - local,
+            Vector3.UnitZ, 8960, Vector3.UnitY, 5440, NativeWideKoalaWallReach);
         NativeWideKoalaPlane(m, world, output, points, 84, new Vector3(2200, 0, 1440) - local,
             Vector3.UnitX, 1800, Vector3.UnitZ, 3360);
+        NativeWideKoalaColumn(m, world, output, local, 734, 763, -1, 745);
+        NativeWideKoalaColumn(m, world, output, local, 763, 775, 1, 769);
     }
 
-    static void NativeWideKoalaPlane(IMemory m, NativeWideWorld world, List<NativeWideRepair> output,
-        List<(Vector3 Position, Vector3 Colour)> points, int texture, Vector3 origin,
-        Vector3 alongU, float lengthU, Vector3 alongV, float lengthV)
+    // The rock pillar at each arena end closes the 4:3 view's side, but it is
+    // only a shell of front faces: in 16:9 the bands looked through its gaps
+    // and past its outer side at the cave beyond and the end walls, so the
+    // pillar seemed full of holes (#156). It becomes a solid rock column:
+    // every pillar triangle swept 2000 outward along X (a prism each, its
+    // foot taken below the floor), i.e. the pillar and all rock beyond it.
+    // Only the prisms' far faces are drawn (wound outward, culled), so the
+    // pillar's own rocks always stay in front: the column shows only through
+    // the pillar's gaps and beyond its outer side, never on the arena side
+    // (a convex hull filled the pillar's hollows there and cut the lava off
+    // at the 4:3 edge).
+    const float NativeWideKoalaColumnReach = 2000, NativeWideKoalaFoot = -300;
+    // Every camera of the level's paths (intro fly-in included) lies in this
+    // box; a prism face that points at all of it is always culled.
+    static readonly Vector3 NativeWideKoalaCameraLow = new(-500, 200, 1400), NativeWideKoalaCameraHigh = new(700, 1350, 3950);
+    static void NativeWideKoalaColumn(IMemory m, NativeWideWorld world, List<NativeWideRepair> output,
+        Vector3 local, int first, int end, int outward, int texture)
     {
+        if (world.PolyCount < end || !TryNativeWideKoalaTile(m, world, texture,
+                out float uMin, out float uMax, out float vMin, out float vMax, out float cellU, out float cellV))
+            return;
+        var lit = new List<(Vector3 Position, Vector3 Colour)>();
+        var prisms = new List<Vector3[]>();
+        var shift = new Vector3(outward * NativeWideKoalaColumnReach, 0, 0);
+        for (int pi = first; pi < end; pi++)
+        {
+            uint poly = world.Polygons + (uint)pi * 8;
+            NativeWidePolygonVertices(FastU32(m, poly), FastU32(m, poly + 4), out int a, out int b, out int c);
+            var corners = new Vector3[6];
+            int k = 0;
+            foreach (int vi in new[] { a, b, c })
+            {
+                var v = ReadNativeWideLocal(m, world, vi);
+                var p = Position(v);
+                if (Math.Max(v.R, Math.Max(v.G, v.B)) >= NativeWideKoalaLit) lit.Add((p, new Vector3(v.R, v.G, v.B)));
+                // Feet on the floor go below it, so no prism face lies in the floor.
+                if (p.Y < 40) p.Y = NativeWideKoalaFoot;
+                corners[k] = p;
+                corners[k + 3] = p + shift;
+                k++;
+            }
+            prisms.Add(corners);
+        }
+        foreach (var q in prisms)
+        {
+            var centre = (q[0] + q[1] + q[2] + q[3] + q[4] + q[5]) / 6;
+            void Face(Vector3 a, Vector3 b, Vector3 c)
+            {
+                var normal = Vector3.Cross(b - a, c - a);
+                if (normal.Length() < 1) return;
+                normal = Vector3.Normalize(normal);
+                if (Vector3.Dot(normal, a - centre) < 0)
+                {
+                    (b, c) = (c, b);
+                    normal = -normal;
+                }
+                bool seen = false;
+                for (int corner = 0; corner < 8 && !seen; corner++)
+                {
+                    var camera = new Vector3(
+                        (corner & 1) == 0 ? NativeWideKoalaCameraLow.X : NativeWideKoalaCameraHigh.X,
+                        (corner & 2) == 0 ? NativeWideKoalaCameraLow.Y : NativeWideKoalaCameraHigh.Y,
+                        (corner & 4) == 0 ? NativeWideKoalaCameraLow.Z : NativeWideKoalaCameraHigh.Z) - local;
+                    seen = Vector3.Dot(normal, camera - a) < 0;
+                }
+                if (!seen) return;
+                NativeWideKoalaTiledFace(output, texture, lit, a, b, c, normal, NativeWideKoalaEye - local,
+                    uMin, uMax, vMin, vMax, cellU, cellV);
+            }
+            Face(q[0], q[1], q[2]);
+            Face(q[3], q[4], q[5]);
+            for (int e = 0; e < 3; e++)
+            {
+                int f = (e + 1) % 3;
+                Face(q[e], q[f], q[f + 3]);
+                Face(q[e], q[f + 3], q[e + 3]);
+            }
+        }
+    }
+
+    // One outward-wound triangle in mirrored texture tiles, wound outward and
+    // culled: drawn only where the camera looks at the inside of the solid.
+    // The tiles are laid as seen from the boss camera (a grid on the screen
+    // of an eye at its usual spot, cast onto the face), so the column's far
+    // faces read as one rock surface at an even scale: tiles laid in each
+    // face's own plane turned into streaks on faces seen at a grazing angle.
+    // Faces the eye sees edge-on keep tiles in their plane.
+    const float NativeWideKoalaEyeDepth = 1800;
+    static readonly Vector3 NativeWideKoalaEye = new(100, 1100, 3800);
+    static void NativeWideKoalaTiledFace(List<NativeWideRepair> output, int texture,
+        List<(Vector3 Position, Vector3 Colour)> lit, Vector3 a, Vector3 b, Vector3 c, Vector3 normal, Vector3 eye,
+        float uMin, float uMax, float vMin, float vMax, float cellU, float cellV)
+    {
+        float planeD = Vector3.Dot(a, normal);
+        bool cast = Math.Abs(Vector3.Dot(normal, Vector3.Normalize(eye - (a + b + c) / 3))) > 0.03f;
+        float screenU = cellU / NativeWideKoalaEyeDepth, screenV = cellV / NativeWideKoalaEyeDepth;
+        var axisU = Vector3.Normalize(Vector3.Cross(Math.Abs(normal.Y) < 0.9f ? Vector3.UnitY : Vector3.UnitX, normal));
+        var axisV = Vector3.Cross(normal, axisU);
+        Vector2 Flat(Vector3 p)
+        {
+            if (!cast) return new(Vector3.Dot(p, axisU) / cellU, Vector3.Dot(p, axisV) / cellV);
+            float w = eye.Z - p.Z;
+            return new((p.X - eye.X) / w / screenU, (p.Y - eye.Y) / w / screenV);
+        }
+        Vector3 Back(Vector2 f)
+        {
+            if (!cast) return axisU * (f.X * cellU) + axisV * (f.Y * cellV) + normal * planeD;
+            var ray = new Vector3(f.X * screenU, f.Y * screenV, -1);
+            return eye + ray * ((planeD - Vector3.Dot(normal, eye)) / Vector3.Dot(normal, ray));
+        }
+        Vector2 fa = Flat(a), fb = Flat(b), fc = Flat(c);
+        // The clip wants a counter-clockwise triangle; the winding is set again in 3D.
+        bool flip = (fb.X - fa.X) * (fc.Y - fa.Y) - (fb.Y - fa.Y) * (fc.X - fa.X) < 0;
+        var corners = flip ? new[] { fa, fc, fb } : new[] { fa, fb, fc };
+        int i0 = (int)MathF.Floor(Math.Min(fa.X, Math.Min(fb.X, fc.X)));
+        int i1 = (int)MathF.Ceiling(Math.Max(fa.X, Math.Max(fb.X, fc.X)));
+        int j0 = (int)MathF.Floor(Math.Min(fa.Y, Math.Min(fb.Y, fc.Y)));
+        int j1 = (int)MathF.Ceiling(Math.Max(fa.Y, Math.Max(fb.Y, fc.Y)));
+        for (int i = i0; i < i1; i++) for (int j = j0; j < j1; j++)
+        {
+            var cell = NativeWideClipToTriangle(
+                [new(i, j), new(i + 1, j), new(i + 1, j + 1), new(i, j + 1)], corners);
+            if (cell.Count < 3) continue;
+            NativeWideClipVertex Corner(Vector2 f)
+            {
+                var p = Back(f);
+                var colour = NativeWideKoalaShade(lit, p, NativeWideKoalaWallReach);
+                float su = f.X - i, sv = f.Y - j;
+                float u = (i & 1) == 0 ? uMin + su * (uMax - uMin) : uMax - su * (uMax - uMin);
+                float v = (j & 1) == 0 ? vMax - sv * (vMax - vMin) : vMin + sv * (vMax - vMin);
+                return new(p.X, p.Y, p.Z, colour.X, colour.Y, colour.Z, u, v);
+            }
+            var corner = cell.Select(Corner).ToArray();
+            var p0 = Position(corner[0]);
+            bool reverse = Vector3.Dot(Vector3.Cross(Position(corner[1]) - p0, Position(corner[2]) - p0), normal) < 0;
+            for (int k = 1; k + 1 < corner.Length; k++)
+                output.Add(reverse
+                    ? new(texture, corner[0], corner[k + 1], corner[k], Boundary: true, Culled: true)
+                    : new(texture, corner[0], corner[k], corner[k + 1], Boundary: true, Culled: true));
+        }
+    }
+
+    // Sutherland-Hodgman: a convex polygon cut to a counter-clockwise triangle.
+    static List<Vector2> NativeWideClipToTriangle(List<Vector2> polygon, Vector2[] triangle)
+    {
+        for (int e = 0; e < 3 && polygon.Count > 0; e++)
+        {
+            Vector2 a = triangle[e], b = triangle[(e + 1) % 3];
+            float Side(Vector2 p) => (b.X - a.X) * (p.Y - a.Y) - (b.Y - a.Y) * (p.X - a.X);
+            var kept = new List<Vector2>(polygon.Count + 1);
+            for (int k = 0; k < polygon.Count; k++)
+            {
+                Vector2 p = polygon[k], q = polygon[(k + 1) % polygon.Count];
+                float sp = Side(p), sq = Side(q);
+                if (sp >= 0) kept.Add(p);
+                if ((sp >= 0) != (sq >= 0)) kept.Add(p + (q - p) * (sp / (sp - sq)));
+            }
+            polygon = kept;
+        }
+        return polygon;
+    }
+
+    static bool TryNativeWideKoalaTile(IMemory m, NativeWideWorld world, int texture,
+        out float uMin, out float uMax, out float vMin, out float vMax, out float cellU, out float cellV)
+    {
+        uMin = uMax = vMin = vMax = cellU = cellV = 0;
         if (!TryNativeWideMaterial(m, world, texture, 0, out _, out _,
-            out short u0, out short v0, out short u1, out short v1, out short u2, out short v2)) return;
-        float uMin = Math.Min(u0, Math.Min(u1, u2)), uMax = Math.Max(u0, Math.Max(u1, u2));
-        float vMin = Math.Min(v0, Math.Min(v1, v2)), vMax = Math.Max(v0, Math.Max(v1, v2));
+            out short u0, out short v0, out short u1, out short v1, out short u2, out short v2)) return false;
+        uMin = Math.Min(u0, Math.Min(u1, u2)); uMax = Math.Max(u0, Math.Max(u1, u2));
+        vMin = Math.Min(v0, Math.Min(v1, v2)); vMax = Math.Max(v0, Math.Max(v1, v2));
         uint poly = world.Polygons + (uint)texture * 8;
         NativeWidePolygonVertices(FastU32(m, poly), FastU32(m, poly + 4), out int a, out int b, out int c);
         Vector3 pa = Position(ReadNativeWideLocal(m, world, a));
         float area = Vector3.Cross(Position(ReadNativeWideLocal(m, world, b)) - pa,
             Position(ReadNativeWideLocal(m, world, c)) - pa).Length();
         float uvArea = Math.Abs((u1 - u0) * (v2 - v0) - (v1 - v0) * (u2 - u0));
-        if (area < 1 || uvArea < 1 || uMax - uMin < 1 || vMax - vMin < 1) return;
+        if (area < 1 || uvArea < 1 || uMax - uMin < 1 || vMax - vMin < 1) return false;
         float density = MathF.Sqrt(uvArea / area);
-        float cellU = (uMax - uMin) / density, cellV = (vMax - vMin) / density;
-        int columns = (int)MathF.Ceiling(lengthU / cellU), rows = (int)MathF.Ceiling(lengthV / cellV);
+        cellU = (uMax - uMin) / density;
+        cellV = (vMax - vMin) / density;
+        return true;
+    }
+
+    // Inverse-distance blend of the nearby scenery colours, fading to the
+    // cave's dark purple away from them.
+    static Vector3 NativeWideKoalaShade(List<(Vector3 Position, Vector3 Colour)> points, Vector3 p, float reach)
+    {
         var dark = new Vector3(10, 7, 28);
-        const float reach = 2500;
-        Vector3 Shade(Vector3 p)
+        Vector3 sum = Vector3.Zero;
+        float weights = 0, nearest = reach;
+        foreach (var (position, colour) in points)
         {
-            Vector3 sum = Vector3.Zero;
-            float weights = 0, nearest = reach;
-            foreach (var (position, colour) in points)
-            {
-                float d = Vector3.Distance(position, p);
-                if (d >= reach) continue;
-                nearest = Math.Min(nearest, d);
-                float w = 1 / MathF.Max(d * d, 1);
-                sum += colour * w;
-                weights += w;
-            }
-            return weights == 0 ? dark : Vector3.Lerp(sum / weights, dark, nearest / reach);
+            float d = Vector3.Distance(position, p);
+            if (d >= reach) continue;
+            nearest = Math.Min(nearest, d);
+            float w = 1 / MathF.Max(d * d, 1);
+            sum += colour * w;
+            weights += w;
         }
+        return weights == 0 ? dark : Vector3.Lerp(sum / weights, dark, nearest / reach);
+    }
+
+    static void NativeWideKoalaPlane(IMemory m, NativeWideWorld world, List<NativeWideRepair> output,
+        List<(Vector3 Position, Vector3 Colour)> points, int texture, Vector3 origin,
+        Vector3 alongU, float lengthU, Vector3 alongV, float lengthV, float reach = 2500)
+    {
+        if (!TryNativeWideKoalaTile(m, world, texture,
+                out float uMin, out float uMax, out float vMin, out float vMax, out float cellU, out float cellV))
+            return;
+        int columns = (int)MathF.Ceiling(lengthU / cellU), rows = (int)MathF.Ceiling(lengthV / cellV);
         Vector3 At(int i, int j) => origin + alongU * (i * cellU) + alongV * (j * cellV);
         var shade = new Vector3[columns + 1, rows + 1];
-        for (int i = 0; i <= columns; i++) for (int j = 0; j <= rows; j++) shade[i, j] = Shade(At(i, j));
+        for (int i = 0; i <= columns; i++) for (int j = 0; j <= rows; j++)
+            shade[i, j] = NativeWideKoalaShade(points, At(i, j), reach);
         for (int i = 0; i < columns; i++) for (int j = 0; j < rows; j++)
         {
             NativeWideClipVertex Corner(int di, int dj)
