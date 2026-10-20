@@ -519,6 +519,76 @@ internal static class CrashUi
         dl.AddRect(min, max, U32(Rgb(36, 18, 4), a), 0f, ImDrawFlags.None, Math.Max(1f, s * 0.05f));
     }
 
+    /// <summary>Fill color of a gem (gem hints card).</summary>
+    public static Vector4 GemColor(GemHints.Gem gem) => gem switch
+    {
+        GemHints.Gem.Red => Rgb(255, 70, 60),
+        GemHints.Gem.Blue => Rgb(70, 140, 255),
+        GemHints.Gem.Green => Rgb(70, 210, 90),
+        GemHints.Gem.Purple => Rgb(180, 95, 255),
+        GemHints.Gem.Yellow => Rgb(255, 225, 60),
+        GemHints.Gem.Orange => Rgb(255, 150, 30),
+        _ => Rgb(170, 215, 255),
+    };
+
+    /// <summary>Line colors of the gem hints card.</summary>
+    public static Vector4 HintColor(GemHints.Tone tone) => tone switch
+    {
+        GemHints.Tone.Good => Rgb(140, 225, 120),
+        GemHints.Tone.Bad => Rgb(255, 130, 105),
+        _ => Sand,
+    };
+
+    public static Vector2 HudBodySize(string text, float px) =>
+        BodyBold.CalcTextSizeA(px, float.MaxValue, 0f, text);
+
+    /// <summary>Nunito HUD line with a drop shadow (gem hints card).</summary>
+    public static void HudBody(ImDrawListPtr dl, string text, Vector2 pos, float px, Vector4 color)
+    {
+        dl.AddText(BodyBold, px, pos + new Vector2(0f, Math.Max(1f, px * 0.08f)), U32(Vector4.Zero, 0.75f), text);
+        dl.AddText(BodyBold, px, pos, U32(color), text);
+    }
+
+    /// <summary>Logo-style HUD title tinted from <paramref name="color"/> (gem hints card).</summary>
+    public static void HudTitle(ImDrawListPtr dl, string text, Vector2 pos, float px, Vector4 color)
+        => OutlinedTitle(dl, Display(px), px, pos, text, px / 30f, Vector4.Lerp(color, Rgb(255, 255, 255), 0.55f), color);
+
+    /// <summary>Dark rounded card behind HUD text with a thin Wumpa border.</summary>
+    public static void HudPanel(ImDrawListPtr dl, Vector2 min, Vector2 max, float rounding)
+    {
+        dl.AddRectFilled(min, max, U32(Night, 0.78f), rounding);
+        dl.AddRect(min, max, U32(Wumpa, 0.45f), rounding, ImDrawFlags.None, Math.Max(1f, rounding * 0.15f));
+    }
+
+    /// <summary>Cut gem icon centred on <paramref name="c"/>: solid when owned, else a faint outline.</summary>
+    public static void HudGem(ImDrawListPtr dl, Vector2 c, float r, Vector4 color, bool owned)
+    {
+        var tl = c + new Vector2(-0.55f * r, -0.6f * r);
+        var tr = c + new Vector2(0.55f * r, -0.6f * r);
+        var gr = c + new Vector2(r, -0.15f * r);
+        var gl = c + new Vector2(-r, -0.15f * r);
+        var bottom = c + new Vector2(0f, r);
+        float a = owned ? 1f : 0.22f;
+        dl.AddQuadFilled(tl, tr, gr, gl, U32(Vector4.Lerp(color, Rgb(255, 255, 255), 0.35f), a));
+        dl.AddTriangleFilled(gl, gr, bottom, U32(color, a));
+        // Facets: girdle and the crown corners down to the point.
+        uint facet = U32(Vector4.Lerp(color, Vector4.Zero with { W = 1f }, 0.35f), owned ? 0.9f : 0.5f);
+        float t = Math.Max(1f, r * 0.08f);
+        dl.AddLine(gl, gr, facet, t);
+        dl.AddLine(tl, bottom, facet, t);
+        dl.AddLine(tr, bottom, facet, t);
+        uint edge = U32(owned ? Rgb(36, 18, 4) : color, owned ? 0.9f : 1f);
+        float e = Math.Max(1f, r * 0.12f);
+        dl.AddLine(tl, tr, edge, e);
+        dl.AddLine(tr, gr, edge, e);
+        dl.AddLine(gr, bottom, edge, e);
+        dl.AddLine(bottom, gl, edge, e);
+        dl.AddLine(gl, tl, edge, e);
+        if (owned)
+            dl.AddTriangleFilled(tl + new Vector2(0.15f * r, 0.1f * r), c + new Vector2(-0.1f * r, -0.5f * r),
+                c + new Vector2(-0.45f * r, -0.2f * r), U32(Rgb(255, 255, 255), 0.7f));
+    }
+
     /// <summary>Tiny Wumpa fruit used as the menu cursor.</summary>
     static void DrawWumpa(ImDrawListPtr dl, Vector2 c, float r, float alpha)
     {

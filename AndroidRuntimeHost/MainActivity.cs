@@ -38,6 +38,7 @@ public sealed class MainActivity : Activity
     DevMenuOverlay? _devMenu;
     TextView? _devHud;
     TextView? _boxHud;
+    TextView? _gemHud;
     DiscDocuments? _disc;
     TouchControllerView? _touchOverlay;
     bool _usingLocalDiscCopy;
@@ -100,6 +101,7 @@ public sealed class MainActivity : Activity
         _devMenu = null;
         _devHud = null;
         _boxHud = null;
+        _gemHud = null;
         _touchOverlay = null;
         _launcher = new LauncherScreen(this);
         _launcher.SelectDiscRequested += PickDiscFolder;
@@ -200,6 +202,30 @@ public sealed class MainActivity : Activity
         {
             LeftMargin = Dp(18),
             BottomMargin = Dp(14),
+        });
+
+        // Gem hints (#131): top-right card below the DEV button, clear of the touch buttons.
+        _gemHud = new TextView(this)
+        {
+            TextSize = 13,
+            Visibility = ViewStates.Gone,
+        };
+        try { _gemHud.SetTypeface(Android.Graphics.Typeface.CreateFromAsset(Assets, "Fonts/Nunito-ExtraBold.ttf"), Android.Graphics.TypefaceStyle.Normal); }
+        catch { _gemHud.SetTypeface(Android.Graphics.Typeface.DefaultBold, Android.Graphics.TypefaceStyle.Normal); }
+        _gemHud.SetMaxWidth(Dp(300));
+        _gemHud.SetLineSpacing(Dp(2), 1f);
+        _gemHud.SetPadding(Dp(12), Dp(8), Dp(12), Dp(9));
+        var gemCard = new Android.Graphics.Drawables.GradientDrawable();
+        gemCard.SetColor(Color.Argb(205, 6, 16, 24));
+        gemCard.SetStroke(Math.Max(1, Dp(1)), Color.Argb(115, 255, 138, 0));
+        gemCard.SetCornerRadius(Dp(10));
+        _gemHud.Background = gemCard;
+        root.AddView(_gemHud, new FrameLayout.LayoutParams(
+            ViewGroup.LayoutParams.WrapContent, ViewGroup.LayoutParams.WrapContent,
+            GravityFlags.Top | GravityFlags.Right)
+        {
+            TopMargin = Dp(48),
+            RightMargin = Dp(12),
         });
 
         var devButton = new Button(this)
@@ -648,6 +674,7 @@ public sealed class MainActivity : Activity
                 host = new AndroidPlatformHost(this, _status, _progress, egl, backend, diagnostics);
                 host.AttachHud(_devHud);
                 host.AttachBoxHud(_boxHud);
+                host.AttachGemHud(_gemHud);
                 _activeHost = host;
                 RecompOne.Runtime.Runtime.SetPlatformHost(host);
                 GameLoader.Run(gameDll, cuePath);

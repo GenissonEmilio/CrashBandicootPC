@@ -106,6 +106,7 @@ public sealed class NativeLauncherUi : UserControl, ILauncherUi
     ThemeCheck? _saveLives;
     ThemeCheck? _analogMovement;
     ThemeCheck? _boxCounter;
+    ThemeCheck? _gemHints;
     ThemeCheck? _singleBoxDrop;
     ThemeCheck? _introOnNewGame;
     ThemeCheck? _cheatLives;
@@ -311,6 +312,7 @@ public sealed class NativeLauncherUi : UserControl, ILauncherUi
         SetCheck(_saveLives, state, "saveLives");
         SetCheck(_analogMovement, state, "analogMovement");
         SetCheck(_boxCounter, state, "boxCounter");
+        SetCheck(_gemHints, state, "gemHints");
         SetCheck(_singleBoxDrop, state, "singleBoxDrop");
         SetCheck(_introOnNewGame, state, "introOnNewGame");
         SetCheck(_cheatLives, state, "infiniteLives");
@@ -1599,6 +1601,12 @@ public sealed class NativeLauncherUi : UserControl, ILauncherUi
         y += 52;
         AddHint("Shows boxes broken / boxes needed for the gem in the corner during levels. Turns gray when a death loses the gem: Crash 1 forgets the boxes broken before the last checkpoint.");
 
+        _gemHints = MakeCheck("Gem hints");
+        _gemHints.Location = new Point(12, y);
+        page.Controls.Add(_gemHints);
+        y += 52;
+        AddHint("On the map, a card shows what each level's gem needs: all boxes without dying, and which colored gem opens its gem path. In levels: a reminder at the start, which gem an inactive gem platform needs, and a notice when a death loses the gem.");
+
         _singleBoxDrop = MakeCheck("Japanese box drop (one box)");
         _singleBoxDrop.Location = new Point(12, y);
         page.Controls.Add(_singleBoxDrop);
@@ -1637,6 +1645,7 @@ public sealed class NativeLauncherUi : UserControl, ILauncherUi
                 saveLives = _saveLives?.Checked ?? true,
                 analogMovement = _analogMovement?.Checked ?? false,
                 boxCounter = _boxCounter?.Checked ?? false,
+                gemHints = _gemHints?.Checked ?? false,
                 singleBoxDrop = _singleBoxDrop?.Checked ?? false,
                 introOnNewGame = _introOnNewGame?.Checked ?? false,
             });

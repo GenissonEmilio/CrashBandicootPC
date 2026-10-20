@@ -394,6 +394,17 @@ public class ViewConfig
     }
 
     /// <summary>
+    /// Gem hints (#131): what the selected level's gem needs on the map, a reminder
+    /// at level start, the gem an inactive gem platform needs, and a notice when a
+    /// death loses the gem. Off by default.
+    /// </summary>
+    public bool GemHints
+    {
+        get => GetBool("GemHints");
+        set => SetBool("GemHints", value);
+    }
+
+    /// <summary>
     /// Japanese level end (#170): after a deathless run with missed boxes, only one
     /// box drops on Crash, and the counter shows the missed count at once. Off by
     /// default (NTSC-U: one box per missed box).

@@ -464,6 +464,10 @@ public static partial class FramePacing
         }
     }
 
+    /// <summary>GOOL header type of a live object, for read-only HUD code (gem hints).</summary>
+    internal static bool TryGetGoolType(IMemory m, uint obj, out uint type) =>
+        TryReadGoolClass(m, obj, out type, out _);
+
     static bool TryReadGoolClass(IMemory m, uint obj, out uint type, out uint cat)
     {
         if (TryReadGoolClassFrom(m, m.ReadU32(obj + ObjGlobalOff), out type, out cat))

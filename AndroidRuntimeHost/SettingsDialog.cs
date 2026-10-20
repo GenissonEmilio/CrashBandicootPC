@@ -113,6 +113,11 @@ static class SettingsDialog
             "Shows boxes broken / boxes needed for the gem in the corner during levels. Turns gray when a death loses the gem: Crash 1 forgets the boxes broken before the last checkpoint.",
             bodyFont));
 
+        var gemHints = AddSwitch(activity, card, "Gem hints", view.GemHints, bodyBold);
+        card.AddView(Hint(activity,
+            "On the map, a card shows what each level's gem needs: all boxes without dying, and which colored gem opens its gem path. In levels: a reminder at the start, which gem an inactive gem platform needs, and a notice when a death loses the gem.",
+            bodyFont));
+
         var singleBoxDrop = AddSwitch(activity, card, "Japanese box drop (one box)", view.SingleBoxDrop, bodyBold);
         card.AddView(Hint(activity,
             "At the level end, after a run without deaths, only one box drops on Crash for the boxes you missed, like the Japanese version. The number still shows how many you missed. Off: one box per missed box, as in the original.",
@@ -182,6 +187,7 @@ static class SettingsDialog
             view.SaveLives = saveLives.Checked;
             view.AnalogMovement = analogMovement.Checked;
             view.BoxCounter = boxCounter.Checked;
+            view.GemHints = gemHints.Checked;
             view.SingleBoxDrop = singleBoxDrop.Checked;
             view.IntroOnNewGame = introOnNewGame.Checked;
 

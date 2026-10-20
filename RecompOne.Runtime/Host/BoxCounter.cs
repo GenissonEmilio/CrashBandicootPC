@@ -78,6 +78,9 @@ public static class BoxCounter
     static uint _respawns;
     static bool _lost;
 
+    /// <summary>Boxes the gem of level <paramref name="lid"/> needs.</summary>
+    internal static bool TryGetTotal(uint lid, out int total) => Totals.TryGetValue(lid, out total);
+
     /// <summary>Forget the current run (a save state was loaded).</summary>
     public static void Reset() => _level = NoLevel;
 
@@ -88,7 +91,16 @@ public static class BoxCounter
     public static bool TryRead(out Reading reading)
     {
         reading = default;
-        if (!ConfigManager.View.BoxCounter) return false;
+        return ConfigManager.View.BoxCounter && TryReadRun(out reading);
+    }
+
+    /// <summary>
+    /// <see cref="TryRead"/> without the setting: gem hints follow the same run
+    /// (and its <see cref="Reading.Lost"/>) when the counter is hidden.
+    /// </summary>
+    internal static bool TryReadRun(out Reading reading)
+    {
+        reading = default;
         var mem = Runtime.Mem;
         if (mem == null) return false;
 

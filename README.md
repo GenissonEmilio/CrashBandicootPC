@@ -25,6 +25,7 @@ This isn't an emulator. The original PS1 code is **statically recompiled** into 
 - **Quick save and quick load.** Save anywhere and load it back in a second: `F5` saves, `F8` loads, `F6`/`F7` switch slot. The same actions are in the pause menu.
 - **Keep your lives.** Optional: the lives count is stored in your memory card save and comes back when you load it, as in Crash 2 and 3.
 - **Box counter.** Optional on-screen count of the boxes you broke and the boxes the level's gem needs. It turns gray when a death loses the gem.
+- **Gem hints.** Optional: on the map, a card shows what the selected level's gem needs (all boxes without dying, and the colored gem that opens its gem path). In levels it reminds you at the start, tells which gem an inactive gem platform needs, and warns when a death loses the gem.
 - **Japanese box drop.** Optional: at the level end, only one box drops on Crash for all the boxes you missed, like the Japanese version. The counter still shows how many you missed.
 - **Story intro on New Game.** Optional: New Game plays the story cutscene before the map, like Crash 2 and 3. Start skips it.
 - **Level warp.** Jump to any level or bonus round from the Dev Menu, including **Stormy Ascent**, the level cut from the original game.

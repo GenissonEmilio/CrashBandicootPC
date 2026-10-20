@@ -84,6 +84,14 @@ internal sealed class DisplaySettingsSection : ISettingsSection
         }
         ImGui.TextDisabled("Boxes broken / boxes needed for the gem, in the corner");
 
+        bool gemHints = ConfigManager.View.GemHints;
+        if (ImGui.Checkbox("Gem hints", ref gemHints))
+        {
+            ConfigManager.View.GemHints = gemHints;
+            ConfigManager.SaveView(PanelManager.Panels);
+        }
+        ImGui.TextDisabled("What each gem needs: map card, level start, gem platforms");
+
         bool singleDrop = ConfigManager.View.SingleBoxDrop;
         if (ImGui.Checkbox("Japanese box drop (one box)", ref singleDrop))
         {

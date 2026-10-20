@@ -227,6 +227,7 @@ public sealed class LauncherHost : Form
             saveLives = ConfigManager.View.SaveLives,
             analogMovement = ConfigManager.View.AnalogMovement,
             boxCounter = ConfigManager.View.BoxCounter,
+            gemHints = ConfigManager.View.GemHints,
             singleBoxDrop = ConfigManager.View.SingleBoxDrop,
             introOnNewGame = ConfigManager.View.IntroOnNewGame,
             infiniteLives = CheatConfig.InfiniteLives,
@@ -689,6 +690,8 @@ public sealed class LauncherHost : Form
             ConfigManager.View.AnalogMovement = am.GetBoolean();
         if (root.TryGetProperty("boxCounter", out var bc))
             ConfigManager.View.BoxCounter = bc.GetBoolean();
+        if (root.TryGetProperty("gemHints", out var gh))
+            ConfigManager.View.GemHints = gh.GetBoolean();
         if (root.TryGetProperty("singleBoxDrop", out var sbd))
             ConfigManager.View.SingleBoxDrop = sbd.GetBoolean();
         if (root.TryGetProperty("introOnNewGame", out var ing))

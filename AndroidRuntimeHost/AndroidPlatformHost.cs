@@ -33,6 +33,9 @@ sealed class AndroidPlatformHost(
     TextView? _boxHud;
     string? _boxText;
     int _boxTone = -1;
+    TextView? _gemHud;
+    RecompOne.Runtime.Host.GemHints.Card? _gemCard;
+    string? _gemHtml;
 
     public static double LastFps { get; private set; }
 
@@ -42,6 +45,7 @@ sealed class AndroidPlatformHost(
     public void SetMasterVolume(float volume) => _audio.SetMasterVolume(volume);
     public void AttachHud(TextView? hud) => _hud = hud;
     public void AttachBoxHud(TextView? hud) => _boxHud = hud;
+    public void AttachGemHud(TextView? hud) => _gemHud = hud;
     public void ShowNotice(string message) => SetStatus(message);
     public void PauseAudio()
     {
@@ -61,6 +65,7 @@ sealed class AndroidPlatformHost(
         Runtime.RamLog.Tick();
         TickHud();
         TickBoxHud();
+        TickGemHud();
 
         if (gpu == null || !gpu.DisplayEnabled || !backend.Ready)
             return;
@@ -223,6 +228,59 @@ sealed class AndroidPlatformHost(
             view.Text = text;
             view.Visibility = Android.Views.ViewStates.Visible;
         });
+    }
+
+    /// <summary>Gem hints (#131) card; the view is touched only when the text changes.</summary>
+    void TickGemHud()
+    {
+        if (_gemHud == null) return;
+        RecompOne.Runtime.Host.GemHints.TryGet(out var card);
+        if (ReferenceEquals(card, _gemCard)) return;
+        _gemCard = card;
+        string? html = card == null ? null : GemHtml(card);
+        if (html == _gemHtml) return;
+        _gemHtml = html;
+
+        activity.RunOnUiThread(() =>
+        {
+            var view = _gemHud;
+            if (view == null) return;
+            if (html == null)
+            {
+                view.Visibility = Android.Views.ViewStates.Gone;
+                return;
+            }
+            view.TextFormatted = Android.Text.Html.FromHtml(html, Android.Text.FromHtmlOptions.ModeLegacy);
+            view.Visibility = Android.Views.ViewStates.Visible;
+        });
+    }
+
+    static string GemHtml(RecompOne.Runtime.Host.GemHints.Card card)
+    {
+        static string Esc(string s) => System.Net.WebUtility.HtmlEncode(s);
+        static string ToneHex(RecompOne.Runtime.Host.GemHints.Tone tone) => tone switch
+        {
+            RecompOne.Runtime.Host.GemHints.Tone.Good => "#8CE178",
+            RecompOne.Runtime.Host.GemHints.Tone.Bad => "#FF8269",
+            _ => "#F4E4BC",
+        };
+        string gem = card.Icon switch
+        {
+            RecompOne.Runtime.Host.GemHints.Gem.Red => "#FF463C",
+            RecompOne.Runtime.Host.GemHints.Gem.Blue => "#468CFF",
+            RecompOne.Runtime.Host.GemHints.Gem.Green => "#46D25A",
+            RecompOne.Runtime.Host.GemHints.Gem.Purple => "#B45FFF",
+            RecompOne.Runtime.Host.GemHints.Gem.Yellow => "#FFE13C",
+            RecompOne.Runtime.Host.GemHints.Gem.Orange => "#FF961E",
+            _ => "#AAD7FF",
+        };
+        string title = card.TitleTone == RecompOne.Runtime.Host.GemHints.Tone.Bad ? ToneHex(card.TitleTone) : gem;
+        var sb = new System.Text.StringBuilder();
+        sb.Append($"<font color=\"{gem}\">{(card.Owned ? "◆" : "◇")}</font> ");
+        sb.Append($"<font color=\"{title}\"><b>{Esc(card.Title.ToUpperInvariant())}</b></font>");
+        foreach (var line in card.Lines)
+            sb.Append($"<br><font color=\"{ToneHex(line.Tone)}\">{Esc(line.Text)}</font>");
+        return sb.ToString();
     }
 
     static string FormatBytes(long bytes)
