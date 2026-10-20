@@ -174,12 +174,32 @@ public static partial class FramePacing
             && m.ReadU32(world.Header) == 8200 && m.ReadU32(world.Header + 4) == 6339
             && m.ReadU32(world.Header + 8) == 123690
             ? [new(653, []), new(658, [400]), new(650, [400, 800]), new(662, [400, 800])] : null;
-        // The Lost City starts at the west end of the temple walkway. Its floor
-        // and front wall stop just outside the 4:3 view, the jungle backdrop
-        // behind them a little further left. All of them repeat, so whole
-        // periods of original polygons are copied (absolute box, offset).
-        NativeWideCopies? copies = level == 9 ? NativeWideBeachCopies(world, (int)m.ReadU32(world.Header),
+        // Toxic Waste ends in a room whose side walls (X 5600 and 10400) are a
+        // gauge pillar, a five-column braced panel and another pillar, from Z
+        // -23200 to -20400. Near the doorway, 16:9 sees past the jambs onto the
+        // front end of both walls, which the 4:3 cull left open: the right
+        // wall's last panel column and most of its pillar, the left wall's top
+        // row and acid band. The two walls are the same wall turned half a turn
+        // about the room's centre (X 8000, Z -21800), so the back end of each
+        // supplies the other's front end. The gap is 392 units, a cell 400: the
+        // copies go behind the scenery (NativeWideToxicEndRoom), the pillar's
+        // behind the panel's, so the overlaps keep the original cells.
+        NativeWideCopies? copies = level == 7 ? NativeWideToxicEndRoom(m, world) ? new(
+                [
+                    new(new(5600, 27599, -22800), new(5600, 30199, -22392), Vector3.Zero, MirrorX: 8000, MirrorZ: -21800),
+                    new(new(5600, 27599, -23200), new(5600, 28599, -22792), Vector3.Zero, MirrorX: 8000, MirrorZ: -21800, Rank: 1),
+                    new(new(5600, 28999, -23200), new(5600, 30199, -22792), Vector3.Zero, MirrorX: 8000, MirrorZ: -21800, Rank: 1),
+                    new(new(10400, 29799, -22808), new(10400, 30199, -22400), Vector3.Zero, MirrorX: 8000, MirrorZ: -21800),
+                    new(new(10400, 29799, -23200), new(10400, 30199, -22800), Vector3.Zero, MirrorX: 8000, MirrorZ: -21800, Rank: 1),
+                    new(new(10400, 27599, -22800), new(10400, 28199, -22400), Vector3.Zero, MirrorX: 8000, MirrorZ: -21800),
+                    new(new(10400, 27599, -23200), new(10400, 28199, -22800), Vector3.Zero, MirrorX: 8000, MirrorZ: -21800, Rank: 1),
+                ], []) : null
+            : level == 9 ? NativeWideBeachCopies(world, (int)m.ReadU32(world.Header),
                 (int)m.ReadU32(world.Header + 8))
+            // The Lost City starts at the west end of the temple walkway. Its floor
+            // and front wall stop just outside the 4:3 view, the jungle backdrop
+            // behind them a little further left. All of them repeat, so whole
+            // periods of original polygons are copied (absolute box, offset).
             : level != 32 ? null
             : (world.PolyCount, world.VertexCount, (int)m.ReadU32(world.Header), (int)m.ReadU32(world.Header + 8)) switch
             {
@@ -583,14 +603,16 @@ public static partial class FramePacing
     }
 
     // Polygons with every vertex inside an absolute box, copied by Offset with U
-    // moved by DU. MirrorX / MirrorY, when set, first reflect them about that
-    // absolute X / Y. Material, when set, supplies the texture page and CLUT
-    // instead of each source polygon. Opaque leaves semi-transparent polygons out.
-    // Complete also adds the missing half of a rectangular cell (right angle at r:
-    // corner p + q - r in position, texture and colour).
+    // moved by DU. MirrorX / MirrorY / MirrorZ, when set, first reflect them about
+    // that absolute X / Y / Z (MirrorX with MirrorZ turns them half a turn about
+    // a vertical axis, so textures keep their handedness). Material, when set,
+    // supplies the texture page and CLUT instead of each source polygon. Opaque
+    // leaves semi-transparent polygons out. Complete also adds the missing half
+    // of a rectangular cell (right angle at r: corner p + q - r in position,
+    // texture and colour). Rank layers fills drawn behind the scenery.
     readonly record struct NativeWideCopy(Vector3 Min, Vector3 Max, Vector3 Offset, int DU = 0,
         int Material = -1, bool Opaque = false, float MirrorX = float.NaN, float MirrorY = float.NaN,
-        bool Complete = false);
+        bool Complete = false, float MirrorZ = float.NaN, float Rank = 0);
     // Copies, boxes of walls and floors whose open near edges continue toward the
     // camera, rows of cells to fill, and terrain to continue sideways.
     sealed record NativeWideCopies(NativeWideCopy[] Copies, NativeWideBox[] NearWalls, NativeWideGrid[]? Grids = null,
@@ -633,18 +655,19 @@ public static partial class FramePacing
                 {
                     X = (float.IsNaN(copy.MirrorX) ? v.X : 2 * (copy.MirrorX - origin.X) - v.X) + copy.Offset.X,
                     Y = (float.IsNaN(copy.MirrorY) ? v.Y : 2 * (copy.MirrorY - origin.Y) - v.Y) + copy.Offset.Y,
-                    Z = v.Z + copy.Offset.Z, U = u + copy.DU, V = texV,
+                    Z = (float.IsNaN(copy.MirrorZ) ? v.Z : 2 * (copy.MirrorZ - origin.Z) - v.Z) + copy.Offset.Z,
+                    U = u + copy.DU, V = texV,
                 };
                 NativeWideClipVertex[] moved = [Move(t[0], u0, v0), Move(t[1], u1, v1), Move(t[2], u2, v2)];
                 int material = copy.Material >= 0 ? copy.Material : pi;
-                repairs.Add(new(material, moved[0], moved[1], moved[2]));
+                repairs.Add(new(material, moved[0], moved[1], moved[2], Rank: copy.Rank));
                 for (int r = 0; copy.Complete && r < 3; r++)
                 {
                     var right = moved[r]; var p = moved[(r + 1) % 3]; var q = moved[(r + 2) % 3];
                     if (Vector3.Dot(Position(p) - Position(right), Position(q) - Position(right)) != 0) continue;
                     repairs.Add(new(material, p, q, new(p.X + q.X - right.X, p.Y + q.Y - right.Y, p.Z + q.Z - right.Z,
                         Math.Clamp(p.R + q.R - right.R, 0, 255), Math.Clamp(p.G + q.G - right.G, 0, 255),
-                        Math.Clamp(p.B + q.B - right.B, 0, 255), p.U + q.U - right.U, p.V + q.V - right.V)));
+                        Math.Clamp(p.B + q.B - right.B, 0, 255), p.U + q.U - right.U, p.V + q.V - right.V), Rank: copy.Rank));
                     break;
                 }
             }

@@ -1460,9 +1460,15 @@ public static partial class FramePacing
     // The Lab's wall continuations (its towers are boundary repairs and keep
     // their true depth), and Cortex Power's wall ends (its raised wall tops
     // are boundary repairs), and the Jungle Rollers, Upstream, Boulder Dash,
-    // Whole Hog and Koala Kong skirts.
+    // Whole Hog and Koala Kong skirts, and Toxic Waste's end room walls.
     static bool NativeWideRepairsBehind(IMemory m, NativeWideWorld world) =>
-        world.PolyCount > 0 && (NativeWideSunsetTemple(m, world) || m.ReadU32(Catalog.LevelIdAddr) is 3 or 6 or 9 or 12 or 15 or 19 or 30 or 33 or 41);
+        world.PolyCount > 0 && (NativeWideSunsetTemple(m, world) || NativeWideToxicEndRoom(m, world)
+            || m.ReadU32(Catalog.LevelIdAddr) is 3 or 6 or 9 or 12 or 15 or 19 or 30 or 33 or 41);
+
+    // Toxic Waste's last mesh: the end room with the warp-out pillar (#151).
+    static bool NativeWideToxicEndRoom(IMemory m, NativeWideWorld world) =>
+        world.PolyCount == 2418 && world.VertexCount == 2151 && m.ReadU32(Catalog.LevelIdAddr) == 7
+            && m.ReadU32(world.Header) == 8200 && (int)m.ReadU32(world.Header + 8) == -15400;
 
     // Cortex Power's corridors run side by side, each path's walls hiding the
     // other: drawn only from their own zone, they came and went as the camera
