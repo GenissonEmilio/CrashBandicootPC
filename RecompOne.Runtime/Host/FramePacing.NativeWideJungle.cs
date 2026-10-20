@@ -515,6 +515,44 @@ public static partial class FramePacing
         }
     }
 
+    // The secret path ends in a room (0c) wider than the corridor leading to
+    // it: 45-degree walls join the room's side walls to the corridor's at both
+    // ends. The 4:3 cull dropped the two near ones (one triangle left), and
+    // the 16:9 view saw the jungle outside through the gaps (#163). Each is
+    // the opposite far corner's wall turned half a turn about the room's
+    // centre, exactly where and how the surviving triangle lies. True depth.
+    static readonly NativeWideCopies NativeWideBoulderDashEndRoom = new(
+    [
+        new(new(9997, -3194, 103593), new(10397, 1206, 103993), Vector3.Zero, MirrorX: 8797, MirrorZ: 105193),
+        new(new(7197, -3194, 103593), new(7597, 1206, 103993), Vector3.Zero, MirrorX: 8797, MirrorZ: 105193),
+    ], []);
+
+    static void NativeWideBoulderDashEndWalls(IMemory m, NativeWideWorld world, List<NativeWideRepair> output)
+    {
+        // Copies landing on a retail triangle (the surviving one) are left out,
+        // and so are the floor corners the boxes also hold.
+        static (Vector3, Vector3, Vector3) Key(Vector3 a, Vector3 b, Vector3 c)
+        {
+            Vector3[] s = [a, b, c];
+            Array.Sort(s, (p, q) => p.X != q.X ? p.X.CompareTo(q.X) : p.Y != q.Y ? p.Y.CompareTo(q.Y) : p.Z.CompareTo(q.Z));
+            return (s[0], s[1], s[2]);
+        }
+        var retail = new HashSet<(Vector3, Vector3, Vector3)>();
+        for (int pi = 0; pi < world.PolyCount; pi++)
+        {
+            uint poly = world.Polygons + (uint)pi * 8;
+            NativeWidePolygonVertices(FastU32(m, poly), FastU32(m, poly + 4), out int a, out int b, out int c);
+            retail.Add(Key(Position(ReadNativeWideLocal(m, world, a)), Position(ReadNativeWideLocal(m, world, b)),
+                Position(ReadNativeWideLocal(m, world, c))));
+        }
+        foreach (var r in NativeWideCopyRepairs(m, world, NativeWideBoulderDashEndRoom))
+        {
+            if ((r.A.Y == r.B.Y && r.B.Y == r.C.Y) || retail.Contains(Key(Position(r.A), Position(r.B), Position(r.C))))
+                continue;
+            output.Add(r with { Boundary = true });
+        }
+    }
+
     // Whole Hog (level 30, #139): the village and jungle the hog rides through,
     // huts, banks and ground all cut along the 4:3 view like Jungle Rollers.
     // Skirted polygons selected the same way, beside-scenery voids only. Its
@@ -751,6 +789,8 @@ public static partial class FramePacing
         if (level == 19 && NativeWideBoulderDashGates.TryGetValue(((int)m.ReadU32(world.Header),
                 (int)m.ReadU32(world.Header + 8)), out var gate))
             NativeWideBoulderDashGateEnds(m, world, gate, all);
+        if (level == 19 && (int)m.ReadU32(world.Header) == 11093 && (int)m.ReadU32(world.Header + 8) == 106153)
+            NativeWideBoulderDashEndWalls(m, world, all);
         if (skirts != null && skirts.TryGetValue(((int)m.ReadU32(world.Header), (int)m.ReadU32(world.Header + 8)),
                 out var skirted))
             NativeWideSkirtRepairs(m, world, [.. skirted], all, river: level == 15, planar: level == 33);
