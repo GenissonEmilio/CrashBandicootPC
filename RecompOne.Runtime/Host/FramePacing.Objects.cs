@@ -1007,7 +1007,8 @@ public static partial class FramePacing
         if (crash) return;
         if (IsRigidWorldPlat(m, obj)) return;
         if (TryReadGoolClass(m, obj, out uint meshType, out _)
-            && meshType is GoolTypePins or GoolTypeChef or GoolTypePlan or GoolTypeFats or GoolTypeMonk)
+            && meshType is GoolTypePins or GoolTypeChef or GoolTypePlan or GoolTypeFats or GoolTypeMonk
+                or GoolTypeWinG)
             return;
         if ((drawn & 0xFF000000u) != 0x80000000u) return;
         if (GamePaused(m)) return;
