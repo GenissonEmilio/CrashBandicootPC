@@ -288,10 +288,11 @@ public static partial class FramePacing
     // towards +U only if it reaches MinEnd. MinCover: how much of its height
     // the plane's faces must really cover (the sides of two ledges far apart
     // share a plane as tall as a wall). EdgeFade: see the copies' colours.
+    // MergeCells: cells whose bounds differ by up to Skew are one cell.
     readonly record struct NativeWideRows(int Normal, int U, bool Low, bool High, float Extend, float MinBlock,
         float MinHeight, float MinLength, float MinRun = float.PositiveInfinity, float MinRowHeight = 0,
         float MinThickness = 0, bool EdgeColour = false, float Skew = 2, float MinEnd = float.NegativeInfinity,
-        float MinCover = 0, float EdgeFade = 0);
+        float MinCover = 0, float EdgeFade = 0, bool MergeCells = false);
 
     static float NativeWideAxis(NativeWideClipVertex v, int axis) => axis == 0 ? v.X : axis == 1 ? v.Y : v.Z;
 
@@ -374,6 +375,15 @@ public static partial class FramePacing
                             break;
                         }
                 if (!rows.TryGetValue((plane, low, high), out var cells)) rows[(plane, low, high)] = cells = [];
+                // MergeCells: so are cells (the two triangles of a cell with one
+                // corner off the grid have slightly different bounds).
+                if (spec.MergeCells)
+                    foreach (var key in cells.Keys)
+                        if (Math.Abs(key.U0 - lo) <= spec.Skew && Math.Abs(key.U1 - hi) <= spec.Skew)
+                        {
+                            (lo, hi) = key;
+                            break;
+                        }
                 if (!cells.TryGetValue((lo, hi), out var cell)) cells[(lo, hi)] = cell = [];
                 cell.Add(new(pi, t[0], t[1], t[2]));
             }
@@ -481,6 +491,14 @@ public static partial class FramePacing
                         NativeWideClipVertex Copy(NativeWideClipVertex v, float offset)
                         {
                             v = NativeWideMoved(v, spec.U, offset);
+                            // MergeCells: the copies lean like the run's end edge (a corner
+                            // off the plane there opened a crack along every copy's edge).
+                            if (spec.MergeCells && endLine)
+                            {
+                                float lo = NativeWideAxis(endA, axisV), along = Math.Clamp((NativeWideAxis(v, axisV) - lo) / (NativeWideAxis(endB, axisV) - lo), 0, 1);
+                                float n = NativeWideAxis(endA, spec.Normal) + (NativeWideAxis(endB, spec.Normal) - NativeWideAxis(endA, spec.Normal)) * along;
+                                v = NativeWideMoved(v, spec.Normal, n - NativeWideAxis(v, spec.Normal));
+                            }
                             if (!shade) return v;
                             // Where v lies between two edge corners across the row, 0 to 1.
                             float Across(NativeWideClipVertex lo, NativeWideClipVertex hi)
