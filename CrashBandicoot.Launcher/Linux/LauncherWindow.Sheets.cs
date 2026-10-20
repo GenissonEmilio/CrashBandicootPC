@@ -279,7 +279,7 @@ sealed partial class LauncherWindow
         var strength = Nav(new ThemeSlider { Value = (int)Math.Round(view.TextureFilterStrength * 100) });
         var dedither = Nav(new ThemeCheck("Dedither") { Checked = view.Dedither });
         var dejitter = Nav(new ThemeCheck("Dejitter") { Checked = view.Dejitter });
-        var scaledDither = Nav(new ThemeCheck("Scaled dither") { Checked = view.ScaledDither });
+        var hiResDither = Nav(new ThemeCheck("High-res dither") { Checked = !view.ScaledDither });
         var crtFilter = Nav(new ThemeCheck("CRT filter (MattiasCRT)") { Checked = view.CrtFilter });
         var renderer = Nav(MakeCombo([(0, "Auto (recommended)"), (1, "OpenGL 3.3"), (2, "OpenGL ES 3")],
             view.GraphicsApi));
@@ -327,8 +327,8 @@ sealed partial class LauncherWindow
                         Children = { new Border { Width = 202, Child = dedither }, dejitter },
                     },
                     Hint("Texture filters auto-off on menus & cutscenes. Dedither and dejitter apply everywhere."),
-                    WithMargin(scaledDither, new Thickness(0, 0, 0, 14)),
-                    Hint("Dither dots keep the PS1 pixel size at any internal resolution, like the original. Off: finer dots above 1x. No effect with Dedither."),
+                    WithMargin(hiResDither, new Thickness(0, 0, 0, 14)),
+                    Hint("Finer dither dots above 1x internal resolution. Off: dots keep the PS1 pixel size, like the original. No effect with Dedither."),
                     WithMargin(crtFilter, new Thickness(0, 0, 0, 14)),
                     Hint("Curved CRT TV look by Mattias Gustavsson: scanlines, glow, and a shadow mask."),
                     Row(Label("Renderer", 202), renderer, 14),
@@ -387,7 +387,7 @@ sealed partial class LauncherWindow
             view.TextureFilterStrength = strength.Value / 100f;
             view.Dedither = dedither.Checked;
             view.Dejitter = dejitter.Checked;
-            view.ScaledDither = scaledDither.Checked;
+            view.ScaledDither = !hiResDither.Checked;
             view.CrtFilter = crtFilter.Checked;
             view.GraphicsApi = ComboValue(renderer, 0);
             view.SaveLives = saveLives.Checked;

@@ -53,15 +53,15 @@ internal sealed class RenderingDevMenuSection : IDevMenuSection
         }
 
         ImGui.BeginDisabled(dedither);
-        bool scaledDither = ConfigManager.View.ScaledDither;
-        if (ImGui.Checkbox("Scaled dither", ref scaledDither))
+        bool hiResDither = !ConfigManager.View.ScaledDither;
+        if (ImGui.Checkbox("High-res dither", ref hiResDither))
         {
-            ConfigManager.View.ScaledDither = scaledDither;
-            Hle.GpuHle.ScaledDither = scaledDither;
+            ConfigManager.View.ScaledDither = !hiResDither;
+            Hle.GpuHle.ScaledDither = !hiResDither;
             ConfigManager.SaveView(PanelManager.Panels);
         }
         ImGui.EndDisabled();
-        ImGuiEx.TextDisabled("PS1-size dither dots; off = finer");
+        ImGuiEx.TextDisabled("Finer dither dots; off = PS1-size");
 
         bool dejitter = ConfigManager.View.Dejitter;
         if (ImGui.Checkbox("Dejitter", ref dejitter))

@@ -381,11 +381,11 @@ sealed partial class DevMenuOverlay : FrameLayout
             view.Dedither = value;
             AndroidGraphics.ApplyLive();
         });
-        Toggle("Scaled dither", view.ScaledDither, value =>
+        Toggle("High-res dither", !view.ScaledDither, value =>
         {
-            view.ScaledDither = value;
+            view.ScaledDither = !value;
             AndroidGraphics.ApplyLive();
-        }, "PS1-size dither dots. Off: finer dots above 1x. No effect with Dedither.");
+        }, "Finer dither dots above 1x. Off: PS1-size dots. No effect with Dedither.");
         Toggle("Dejitter", view.Dejitter, value =>
         {
             view.Dejitter = value;

@@ -159,15 +159,15 @@ internal sealed class DisplaySettingsSection : ISettingsSection
         ImGui.TextDisabled("Removes PS1 dither noise");
 
         ImGui.BeginDisabled(dedither);
-        bool scaledDither = ConfigManager.View.ScaledDither;
-        if (ImGui.Checkbox("Scaled dither", ref scaledDither))
+        bool hiResDither = !ConfigManager.View.ScaledDither;
+        if (ImGui.Checkbox("High-res dither", ref hiResDither))
         {
-            ConfigManager.View.ScaledDither = scaledDither;
-            Hle.GpuHle.ScaledDither = scaledDither;
+            ConfigManager.View.ScaledDither = !hiResDither;
+            Hle.GpuHle.ScaledDither = !hiResDither;
             ConfigManager.SaveView(PanelManager.Panels);
         }
         ImGui.EndDisabled();
-        ImGui.TextDisabled("PS1-size dither dots at any resolution; off = finer");
+        ImGui.TextDisabled("Finer dither dots above 1x; off = PS1-size dots");
 
         bool dejitter = ConfigManager.View.Dejitter;
         if (ImGui.Checkbox("Dejitter", ref dejitter))

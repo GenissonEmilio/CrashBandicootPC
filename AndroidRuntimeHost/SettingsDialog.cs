@@ -88,9 +88,9 @@ static class SettingsDialog
             "Texture filters auto-off on menus and cutscenes. Dedither and dejitter apply everywhere.",
             bodyFont));
 
-        var scaledDither = AddSwitch(activity, card, "Scaled dither", view.ScaledDither, bodyBold);
+        var hiResDither = AddSwitch(activity, card, "High-res dither", !view.ScaledDither, bodyBold);
         card.AddView(Hint(activity,
-            "Dither dots keep the PS1 pixel size at any internal resolution, like the original. Off: finer dots above 1x. No effect with Dedither.",
+            "Finer dither dots above 1x internal resolution. Off: dots keep the PS1 pixel size, like the original. No effect with Dedither.",
             bodyFont));
 
         var crtFilter = AddSwitch(activity, card, "CRT filter (MattiasCRT)", view.CrtFilter, bodyBold);
@@ -176,7 +176,7 @@ static class SettingsDialog
             view.TextureFilter = Math.Clamp(filter.SelectedItemPosition, 0, FilterLabels.Length - 1);
             view.TextureFilterStrength = filterStrength.Progress / 100f;
             view.Dedither = dedither.Checked;
-            view.ScaledDither = scaledDither.Checked;
+            view.ScaledDither = !hiResDither.Checked;
             view.Dejitter = dejitter.Checked;
             view.CrtFilter = crtFilter.Checked;
             view.SaveLives = saveLives.Checked;

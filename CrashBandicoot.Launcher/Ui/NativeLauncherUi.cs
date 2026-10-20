@@ -100,7 +100,7 @@ public sealed class NativeLauncherUi : UserControl, ILauncherUi
     ThemeSlider? _filterStrength;
     Label? _filterStrengthLabel;
     ThemeCheck? _dedither;
-    ThemeCheck? _scaledDither;
+    ThemeCheck? _hiResDither;
     ThemeCheck? _dejitter;
     ThemeCheck? _crtFilter;
     ThemeCheck? _saveLives;
@@ -304,7 +304,8 @@ public sealed class NativeLauncherUi : UserControl, ILauncherUi
             _filterStrength is { IsDisposed: false })
             _filterStrength.Value = Math.Clamp((int)Math.Round(strength * 100), 0, 100);
         SetCheck(_dedither, state, "dedither");
-        SetCheck(_scaledDither, state, "scaledDither");
+        if (_hiResDither is { IsDisposed: false } && state.TryGetProperty("scaledDither", out var sd))
+            _hiResDither.Checked = sd.ValueKind == JsonValueKind.False;
         SetCheck(_dejitter, state, "dejitter");
         SetCheck(_crtFilter, state, "crtFilter");
         SetCheck(_saveLives, state, "saveLives");
@@ -1538,12 +1539,11 @@ public sealed class NativeLauncherUi : UserControl, ILauncherUi
         y += 52;
         AddHint("Texture filters auto-off on menus & cutscenes. Dedither and dejitter apply everywhere.");
 
-        _scaledDither = MakeCheck("Scaled dither");
-        _scaledDither.Location = new Point(12, y);
-        _scaledDither.Checked = true;
-        page.Controls.Add(_scaledDither);
+        _hiResDither = MakeCheck("High-res dither");
+        _hiResDither.Location = new Point(12, y);
+        page.Controls.Add(_hiResDither);
         y += 52;
-        AddHint("Dither dots keep the PS1 pixel size at any internal resolution, like the original. Off: finer dots above 1x. No effect with Dedither.");
+        AddHint("Finer dither dots above 1x internal resolution. Off: dots keep the PS1 pixel size, like the original. No effect with Dedither.");
 
         _crtFilter = MakeCheck("CRT filter (MattiasCRT)");
         _crtFilter.Location = new Point(12, y);
@@ -1630,7 +1630,7 @@ public sealed class NativeLauncherUi : UserControl, ILauncherUi
                 textureFilter = _texFilter?.SelectedItem is Kv tfKv ? tfKv.Value : 0,
                 textureFilterStrength = (_filterStrength?.Value ?? 50) / 100.0,
                 dedither = _dedither?.Checked ?? false,
-                scaledDither = _scaledDither?.Checked ?? true,
+                scaledDither = !(_hiResDither?.Checked ?? false),
                 dejitter = _dejitter?.Checked ?? false,
                 crtFilter = _crtFilter?.Checked ?? false,
                 graphicsApi = _renderer?.SelectedItem is Kv gaKv ? gaKv.Value : 0,
