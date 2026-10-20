@@ -86,6 +86,17 @@
           Visible="false" />
   </ItemGroup>
 
+  <!-- win-arm64 (Windows on ARM, Snapdragon X, issue #68): NativeFileDialogSharp and
+       RabbitizerSharp ship no arm64 natives. .github/workflows/release.yml builds them
+       from the upstream sources into native/win-arm64/; the single-file bundles them. -->
+  <ItemGroup Condition="'$(RuntimeIdentifier)' == 'win-arm64'">
+    <None Include="..\native\win-arm64\nfd.dll;..\native\win-arm64\rabbitizer.dll"
+          Link="%(Filename)%(Extension)"
+          CopyToOutputDirectory="PreserveNewest"
+          CopyToPublishDirectory="PreserveNewest"
+          Visible="false" />
+  </ItemGroup>
+
   <!-- Avalonia launcher UI is Linux-only. -->
   <ItemGroup Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'windows'">
     <Compile Remove="Linux\**" />

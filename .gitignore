@@ -159,8 +159,9 @@ credentials*.json
 *.pdb
 crash-*.dmp
 minidump*
-# linux-arm64 natives: built by .github/workflows/release.yml on every release
+# linux-arm64 / win-arm64 natives: built by .github/workflows/release.yml on every release
 /native/linux-arm64/*.so
+/native/win-arm64/*.dll
 
 # --- Optional: local notes that might contain dump paths ---------------------
 LOCAL.md

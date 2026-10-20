@@ -46,7 +46,7 @@ You need your own dump of **Crash Bandicoot (USA)**, serial **SCUS-94900**, as a
 
 ### Windows
 
-1. Download `CrashBandicoot.exe` from [**Releases**](https://github.com/Matteo842/CrashBandicoot-Launcher/releases/latest).
+1. Download `CrashBandicoot.exe` from [**Releases**](https://github.com/Matteo842/CrashBandicoot-Launcher/releases/latest). On a Windows on ARM PC (for example a Snapdragon X laptop), download `CrashBandicoot-arm64.exe` instead.
 2. Run it and click **Select disc** to choose your `.chd` or `.cue`.
 3. Click **START GAME**.
 
@@ -112,14 +112,15 @@ LIBGL_ALWAYS_SOFTWARE=1 ./CrashBandicoot-Linux --run /path/to/game.cue
 | | Windows | Linux | Android |
 |---|---|---|---|
 | **System** | Windows 10 or 11 | glibc 2.34 or later: Ubuntu 22.04+, Debian 12+, Fedora 35+, RHEL / AlmaLinux / Rocky Linux 9+ | Android 8.0 (API 26) or later |
-| **CPU** | 64-bit x86 (`x64`) | 64-bit x86 (`x86-64`) or 64-bit ARM (`arm64`) | 64-bit ARM (`arm64-v8a`) |
+| **CPU** | 64-bit x86 (`x64`) or 64-bit ARM (`arm64`) | 64-bit x86 (`x86-64`) or 64-bit ARM (`arm64`) | 64-bit ARM (`arm64-v8a`) |
 | **Graphics** | OpenGL 4.3 (or 3.3) | OpenGL 4.3 (or 3.3, or OpenGL ES 3.0) | OpenGL ES 3.2 |
-| **Also needed** | [Visual C++ Redistributable 2015–2022 (x64)](https://aka.ms/vs/17/release/vc_redist.x64.exe) | X11 or XWayland | Nothing |
+| **Also needed** | Visual C++ Redistributable 2015–2022 ([x64](https://aka.ms/vs/17/release/vc_redist.x64.exe), or [ARM64](https://aka.ms/vs/17/release/vc_redist.arm64.exe) for the arm64 build) | X11 or XWayland | Nothing |
 
-- **No 32-bit builds** on any platform, and no native ARM build for Windows.
+- **No 32-bit builds** on any platform.
 - **OpenGL 4.3** works on most PC GPUs from 2012 on, for example NVIDIA GeForce 400 series, AMD Radeon HD 7000 series, Intel HD Graphics 4600 or newer. The game doesn't use Direct3D or Vulkan. If the game window doesn't open, update your GPU driver first.
 - **Older GPUs:** without OpenGL 4.3 the game falls back on its own to OpenGL 3.3 (for example Intel HD Graphics on Atom/Celeron chips), then to OpenGL ES 3.0 or newer. Settings › Graphics › **Renderer** picks one of them first. OpenGL ES also needs framebuffer fetch or `GL_EXT_blend_func_extended`; Mesa drivers have them.
 - **Visual C++ Redistributable (Windows):** most PCs already have it, because many games install it. Without it, the game can't open its window or play sound.
+- **Windows on ARM (Snapdragon X):** use `CrashBandicoot-arm64.exe`, which runs natively; `CrashBandicoot.exe` also starts there, but only through Windows' x64 emulation. OpenGL on these PCs comes from Microsoft's *OpenCL, OpenGL, and Vulkan Compatibility Pack* (Microsoft Store): install or update it if the game window doesn't open or draws wrongly. This build gets less testing than the x64 one.
 - **Linux:** the launcher also needs fontconfig and ICU (`libicu`), which every desktop distribution includes. Older releases, such as Ubuntu 20.04 or Debian 11, have an older glibc and can't run the game.
 - **Linux on ARM (Raspberry Pi 4/5):** the `arm64` build needs a 64-bit system, such as Raspberry Pi OS 64-bit (Bookworm or newer); the 32-bit Raspberry Pi OS can't run it. The Pi 4 and 5 GPU offers OpenGL ES 3.1, which the game uses through the fallback above. A Pi 3 or older has no OpenGL ES 3 and can't run the game. The first launch builds the game on the Pi itself, which takes much longer than on a PC. This build gets less testing than the x86-64 one.
 - **Android GPU:** besides OpenGL ES 3.2, the driver must support framebuffer fetch or `GL_EXT_blend_func_extended`. Adreno (Snapdragon) and Mali drivers do. The APK also contains `x86_64` libraries (emulators, some Chromebooks), but that gets less testing.
@@ -205,10 +206,11 @@ From the repo root, `python publish_release.py` asks which platform to build:
 1. **Windows**: `publish-single\CrashBandicoot.exe`
 2. **Linux**: `publish-linux\CrashBandicoot`
 3. **Android**: `publish-android\CrashBandicoot-<version>.apk` (arm64, signed)
-4. All four
+4. All five
 5. **Linux arm64**: `publish-linux-arm64\CrashBandicoot` (needs the two libraries in `native/linux-arm64/`, see the [README](native/linux-arm64/README.md) there)
+6. **Windows arm64**: `publish-win-arm64\CrashBandicoot.exe` (needs the two libraries in `native/win-arm64/`, see the [README](native/win-arm64/README.md) there)
 
-You can also run it without prompts: `--platform windows|linux|linux-arm64|android|all`. Other options are `--out my-folder` and `--clean`.
+You can also run it without prompts: `--platform windows|windows-arm64|linux|linux-arm64|android|all`. Other options are `--out my-folder` and `--clean`.
 
 The first Android publish creates `signing/android-release.keystore`, which is gitignored. Back it up: if you lose the keystore, you can't update the same app.
 
