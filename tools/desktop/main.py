@@ -368,7 +368,7 @@ class Launcher:
         dialog.format_secondary_text(text); dialog.run(); dialog.destroy()
 
     def open_saves(self,*_):
-        path=self.library.player_directory / "saves"; path.mkdir(parents=True,exist_ok=True)
+        path=self.library.player_directory / "save"; path.mkdir(parents=True,exist_ok=True)
         Gtk.show_uri_on_window(self.window,path.as_uri(),Gdk.CURRENT_TIME)
 
     def install_menu(self,*_):
