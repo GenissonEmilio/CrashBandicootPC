@@ -14,12 +14,20 @@ internal sealed class EngineDevMenuSection : IDevMenuSection
     public void Draw()
     {
         bool hud = ConfigManager.View.ShowDevHud;
-        if (ImGui.Checkbox("Show FPS / Mem HUD", ref hud))
+        if (ImGui.Checkbox("Show FPS counter", ref hud))
         {
             ConfigManager.View.ShowDevHud = hud;
             ConfigManager.SaveView(PanelManager.Panels);
         }
         ImGuiEx.TextDisabled("Top-right overlay (independent of this menu)");
+        ImGui.BeginDisabled(!hud);
+        bool details = ConfigManager.View.DevHudDetails;
+        if (ImGui.Checkbox("Detailed stats (frame times, renderer, memory)", ref details))
+        {
+            ConfigManager.View.DevHudDetails = details;
+            ConfigManager.SaveView(PanelManager.Panels);
+        }
+        ImGui.EndDisabled();
 
         ImGui.Spacing();
         ImGui.Separator();

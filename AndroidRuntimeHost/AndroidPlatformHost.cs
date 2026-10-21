@@ -176,11 +176,16 @@ sealed class AndroidPlatformHost(
         _hudFrames = 0;
         _hudWindow = now;
         var fps = _hudFps;
-        long workingSet = 0;
-        try { workingSet = System.Diagnostics.Process.GetCurrentProcess().WorkingSet64; }
-        catch { /* HUD is best-effort */ }
-
-        var text = $"{fps:0.0} fps\n{AndroidDisplayPacing.Describe()}\n{FormatBytes(workingSet)}";
+        string text;
+        if (!ConfigManager.View.DevHudDetails)
+            text = $"{fps:0} FPS";
+        else
+        {
+            long workingSet = 0;
+            try { workingSet = System.Diagnostics.Process.GetCurrentProcess().WorkingSet64; }
+            catch { /* HUD is best-effort */ }
+            text = $"{fps:0.0} fps\n{AndroidDisplayPacing.Describe()}\n{FormatBytes(workingSet)}";
+        }
         activity.RunOnUiThread(() =>
         {
             if (_hud == null) return;

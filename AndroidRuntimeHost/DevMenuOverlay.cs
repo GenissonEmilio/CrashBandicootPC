@@ -134,12 +134,17 @@ sealed partial class DevMenuOverlay : FrameLayout
         _body.RemoveAllViews();
         Hint("DEVELOPER");
         Divider();
-        Toggle("Show FPS / Mem HUD", ConfigManager.View.ShowDevHud, value =>
+        Toggle("Show FPS counter", ConfigManager.View.ShowDevHud, value =>
         {
             ConfigManager.View.ShowDevHud = value;
             ConfigManager.SaveView(Array.Empty<IPanel>());
             _hudChanged(value);
         }, "Top-right overlay. Independent of this menu.");
+        Toggle("Detailed stats", ConfigManager.View.DevHudDetails, value =>
+        {
+            ConfigManager.View.DevHudDetails = value;
+            ConfigManager.SaveView(Array.Empty<IPanel>());
+        }, "Adds display pacing and memory under the FPS.");
         LiveMono();
         UpdateRootFps();
         Divider();

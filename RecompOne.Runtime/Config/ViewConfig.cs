@@ -330,6 +330,16 @@ public class ViewConfig
     }
 
     /// <summary>
+    /// HUD shows frame times, renderer and memory under the FPS line (#176).
+    /// Off by default: the HUD is a plain FPS counter.
+    /// </summary>
+    public bool DevHudDetails
+    {
+        get => GetBool("DevHudDetails");
+        set => SetBool("DevHudDetails", value);
+    }
+
+    /// <summary>
     /// Pause menu, Developer Menu and Settings drawn in the launcher look (Bungee /
     /// Nunito, Wumpa colors). Off = the plain gray ImGui menus. On by default.
     /// </summary>

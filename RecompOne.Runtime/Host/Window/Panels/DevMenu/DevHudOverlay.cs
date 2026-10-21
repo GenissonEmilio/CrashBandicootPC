@@ -5,7 +5,7 @@ using RecompOne.Runtime.Host.Diagnostics;
 
 namespace RecompOne.Runtime.Host.Window;
 
-/// <summary>Optional top-right FPS + Working Set overlay, plus a brief mode toast.</summary>
+/// <summary>Optional top-right FPS counter (detailed stats opt-in), plus a brief mode toast.</summary>
 internal static class DevHudOverlay
 {
     const long FlashMs = 1500;
@@ -98,10 +98,16 @@ internal static class DevHudOverlay
         PushHudStyle(ui);
         if (ImGui.Begin("##dev-hud", HudFlags))
         {
-            ImGui.TextUnformatted($"{HostDiagnostics.Fps:0.00} fps");
-            ImGui.TextUnformatted($"{HostDiagnostics.DrawnFps:0.00} drawn/s");
-            DrawFrameTimes(ui);
-            ImGui.TextUnformatted($"WS {HostDiagnostics.FormatBytes(HostDiagnostics.WorkingSetBytes)}");
+            // #176: plain FPS counter unless the detailed stats are asked for.
+            if (!ConfigManager.View.DevHudDetails)
+                ImGui.TextUnformatted($"{HostDiagnostics.Fps:0} FPS");
+            else
+            {
+                ImGui.TextUnformatted($"{HostDiagnostics.Fps:0.00} fps");
+                ImGui.TextUnformatted($"{HostDiagnostics.DrawnFps:0.00} drawn/s");
+                DrawFrameTimes(ui);
+                ImGui.TextUnformatted($"WS {HostDiagnostics.FormatBytes(HostDiagnostics.WorkingSetBytes)}");
+            }
         }
         ImGui.End();
         ImGui.PopStyleVar(3);
