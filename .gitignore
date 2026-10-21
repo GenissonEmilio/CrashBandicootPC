@@ -203,3 +203,7 @@ docs/issue-triage-2026-09-20.json
 tools/CrashBandicoot.TimingProbe/README.md
 
 /state
+/dist/
+*.7z
+*.rar
+/tools/desktop/release/*.tar.*

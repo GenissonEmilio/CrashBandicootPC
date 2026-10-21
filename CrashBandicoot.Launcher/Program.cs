@@ -11,6 +11,11 @@ internal static class Program
 #endif
     private static int Main(string[] args)
     {
+        // The desktop launcher keeps recompilation, preferences and saves in
+        // the user's data directory; the installed engine can be read-only.
+        var dataRoot = Environment.GetEnvironmentVariable("CRASH_PC_DATA_DIR");
+        if (!string.IsNullOrWhiteSpace(dataRoot))
+            RecompOne.Runtime.AppPaths.SetRoot(dataRoot);
         try
         {
             Directory.SetCurrentDirectory(RecompOne.Runtime.AppPaths.Root);
@@ -57,6 +62,14 @@ internal static class Program
                 var dll = RecompPipeline.EnsureReady(cue, progress);
                 Console.WriteLine($"[CrashBandicoot] ready: {dll}");
                 return 0;
+            }
+
+            if (args.Length >= 3 && args[0] == "--desktop-test")
+            {
+                var cue = Path.GetFullPath(args[1]);
+                var dll = RecompPipeline.EnsureReady(cue);
+                uint? level = args.Length > 3 ? uint.Parse(args[3]) : 9;
+                return DesktopValidation.Run(dll, cue, Path.GetFullPath(args[2]), level);
             }
 
             if (args.Length >= 1 && string.Equals(args[0], "--run", StringComparison.OrdinalIgnoreCase))

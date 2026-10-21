@@ -1,6 +1,8 @@
 using System.Reflection;
 using System.Runtime.Loader;
 using System.Text.Json;
+using System.Security.Cryptography;
+using System.Text;
 using RecompOne.Runtime;
 using RecompOne.Runtime.Diagnostics;
 using RecompOne.Runtime.Host;
@@ -24,7 +26,20 @@ public sealed class GameManifest
 /// </summary>
 public static class GameStore
 {
-    public const string PipelineVersion = "9";
+    static readonly Lazy<string> PipelineKey = new(() =>
+    {
+        // Keep valid local code across restarts, but regenerate it when a
+        // compiler, post-pass, runtime ABI, patch or recomp config changes.
+        using var hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
+        foreach (var assembly in new[] { typeof(GameStore).Assembly, typeof(AppPaths).Assembly,
+                                        typeof(RecompOne.Recompiler.Config.RecompOneConfig).Assembly })
+            hash.AppendData(Encoding.UTF8.GetBytes(assembly.ManifestModule.ModuleVersionId.ToString()));
+        foreach (var path in new[] { RecompPipeline.ConfigPath,
+                    Path.Combine(AppContext.BaseDirectory, "Recomp", "Patches", "main.cs.patch") })
+            hash.AppendData(SHA256.HashData(File.ReadAllBytes(path)));
+        return "9-" + Convert.ToHexString(hash.GetHashAndReset())[..24];
+    });
+    public static string PipelineVersion => PipelineKey.Value;
 
     public static string RootDir => AppPaths.GameDir;
 

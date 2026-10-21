@@ -1,3 +1,60 @@
+# CrashBandicootPC — Linux
+
+Port de Crash Bandicoot (PS1) para Linux, mantido por [GenissonEmilio](https://github.com/GenissonEmilio).
+Interface em português baseada no launcher do ForbiddenMemoriesPC, com identidade visual do Crash.
+O runtime e o recompilador são derivados de [Matteo842/CrashBandicoot-Launcher](https://github.com/Matteo842/CrashBandicoot-Launcher), sob MIT.
+
+## Usar sem terminal
+
+1. Baixe `CrashBandicootPC-0.1.0-linux-x86_64.tar.gz` em [Releases](https://github.com/GenissonEmilio/CrashBandicootPC/releases).
+2. Extraia a pasta inteira e abra **CrashBandicootPC** com dois cliques.
+3. Clique em **Escolher arquivo** e selecione seu disco americano **SCUS-94900**.
+4. Aguarde a primeira preparação e clique em **Iniciar jogo**. Depois, basta clicar em jogar.
+
+Aceita BIN/IMG, CUE com seu BIN e arquivos ZIP, RAR ou 7Z, inclusive arquivos com extensão incorreta.
+A importação confere o SHA-256 completo do executável e os limites dos arquivos de fases.
+O importador não executa programas ou documentos encontrados no arquivo compactado.
+
+A preparação recompila o código do seu disco localmente. O cache evita repetir a compilação e é
+invalidado quando o compilador, runtime, configuração ou patches mudam. A ROM, código gerado,
+configurações e saves ficam apenas no computador. Nada disso entra no repositório ou no release.
+
+Em **Sobre o port → Adicionar ao menu de aplicativos**, crie o atalho do Linux.
+Os dados ficam em `~/.local/share/CrashBandicootPC` (ou `$XDG_DATA_HOME/CrashBandicootPC`):
+`discs/` guarda o disco preparado; `player/` guarda cache, saves, estados, configurações e mods.
+Atualizações do aplicativo preservam essa pasta.
+
+O pacote funciona offline e inclui Python/GTK, .NET e o recompilador. Não exige SDK, compilador ou
+bibliotecas de 32 bits instalados. Requer Linux x86-64, glibc 2.35+, sessão gráfica e GPU com
+OpenGL 3.3+ ou OpenGL ES 3.0+ e as extensões de blend necessárias.
+
+**Controles:** setas mover; **Z** pular/confirmar; **X** girar; **Enter** Start.
+**Esc** abre pausa e configurações clicáveis; **F5/F8** salvam/carregam estado;
+**F6/F7** trocam slot; **F11** alterna tela cheia. Controles USB/Bluetooth são suportados.
+Resolução interna, widescreen e outras opções ficam nas configurações do jogo.
+
+![Launcher Linux em português](docs/launcher-linux.png)
+
+## Compilar e validar
+
+Requer .NET SDK 10 e Docker. A compilação não precisa de ROM:
+
+```sh
+sh tools/desktop/release/build-linux.sh
+python3 -m unittest discover -s tests/desktop -v
+```
+
+O workflow **Linux desktop** compila o pacote e abre o launcher em um Linux limpo sem
+Python ou .NET instalados, usando apenas dados sintéticos. A validação com disco do usuário
+é local e usa pastas de saves próprias. Veja [proveniência e validação](docs/FORK-LINUX.md).
+
+O jogo é disponibilizado inteiro pelo runtime; os testes documentados não equivalem a uma
+campanha inteira jogada até 100%, e esta versão herda as limitações documentadas da base.
+
+---
+
+## Documentação da base original
+
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Latest Release](https://img.shields.io/github/v/release/Matteo842/CrashBandicoot-Launcher)](https://github.com/Matteo842/CrashBandicoot-Launcher/releases/latest)
 [![Downloads](https://img.shields.io/github/downloads/Matteo842/CrashBandicoot-Launcher/total.svg)](https://github.com/Matteo842/CrashBandicoot-Launcher/releases)

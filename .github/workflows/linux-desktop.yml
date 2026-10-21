@@ -1,0 +1,50 @@
+name: Linux desktop
+on:
+  push:
+    branches: [main, 'codex/**']
+    tags: ['linux-v*']
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: linux-desktop-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  build-and-test:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: crash-linux-${{ hashFiles('**/*.csproj') }}
+      - name: Import and launcher tests with synthetic data
+        run: python3 -m unittest discover -s tests/desktop -v
+      - name: Build portable Linux without a disc
+        run: sh tools/desktop/release/build-linux.sh > artifacts-ci-build.log 2>&1
+      - name: Start the frozen launcher without Python or .NET installed
+        run: |
+          docker build -f tools/desktop/release/Test.Dockerfile -t crash-clean tools/desktop/release
+          mkdir -p artifacts/ci
+          docker run --rm --cpus=2 -u "$(id -u):$(id -g)" -e HOME=/tmp -v "$PWD:/src" crash-clean \
+            timeout 45s xvfb-run -a dist/CrashBandicootPC/CrashBandicootPC \
+            --data-dir /src/artifacts/ci/data --screenshot /src/artifacts/ci/launcher.png
+          docker run --rm -e CRASH_PC_DATA_DIR=/tmp/crash-help -e DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=1 -v "$PWD:/src" crash-clean dist/CrashBandicootPC/engine/CrashBandicoot --help
+          test -s artifacts/ci/launcher.png
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: CrashBandicootPC-linux-x86_64
+          path: |
+            dist/CrashBandicootPC-*.tar.gz
+            dist/CrashBandicootPC-*.sha256
+            artifacts-ci-build.log
+            artifacts/ci/launcher.png
