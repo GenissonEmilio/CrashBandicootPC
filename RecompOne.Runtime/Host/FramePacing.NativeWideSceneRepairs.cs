@@ -122,50 +122,7 @@ public static partial class FramePacing
         bool hog = level == 17 && world.PolyCount == 1232 && world.VertexCount == 1382
             && m.ReadU32(world.Header) == 8383 && m.ReadU32(world.Header + 4) == 7163
             && m.ReadU32(world.Header + 8) == 122966;
-        // The Great Hall's end walls stop at the 4:3 edge as they approach the
-        // camera: the hall's left and right ends, and the right wall where the
-        // second gallery turns. Their stone cells repeat, so a block of original
-        // cells is copied along Z instead (no seams, no coplanar overlap between
-        // copies). Absolute X plane, Y and Z range of the block, Y offset, first
-        // Z shift; copies step by the block length until the wall passes the
-        // camera's nearest path point.
-        NativeWideHallWalls? hallWalls = level != 44 ? null
-            : (world.PolyCount, world.VertexCount, (int)m.ReadU32(world.Header), (int)m.ReadU32(world.Header + 8)) switch
-            {
-                (2466, 2395, 15063, 126774) => new(
-                [
-                    // Right end: three cells per period; the grid restarts after the column.
-                    new(22799, 797, 6685, 121198, 122798, 0, 2400, 127200),
-                    // Left end, beside and above its window.
-                    new(5599, 2397, 3997, 122798, 124398, 0, 1600, 127200),
-                    new(5599, 3997, 5597, 123998, 124398, 0, 400, 127200),
-                    new(5599, 4797, 5597, 123998, 124398, 800, 0, 127200),
-                    new(5599, 6397, 6997, 122798, 123398, 0, 600, 127200),
-                ],
-                // The window keeps only the far half of its arch surround.
-                Complete: [2399, 2410], Mirror: [112, 113, 114], MirrorZ: 123398,
-                // Behind the near column the right end wall was left open between
-                // Z 119598 and 121198 (only a few cells and two half cells remain),
-                // which 16:9 sees past the column. One period of the same three
-                // columns, each column stretched to its own width (536/528 swap).
-                Spans:
-                [
-                    new(22799, 3197, 7701, 121198, 121734, 119598, 120134),
-                    new(22799, 4829, 7701, 121734, 122270, 120134, 120662),
-                    new(22799, 2397, 5725, 122270, 122798, 120662, 121198),
-                ]),
-                (3148, 3050, 27889, 111327) => new(
-                [
-                    // Second gallery's right wall: one column per period. Each row
-                    // continues after its own last cell.
-                    new(35193, 5597, 6397, 111199, 111599, 0, 400, 115200),
-                    new(35193, 3197, 5597, 111199, 111599, 0, 800, 115200),
-                    new(35193, 2397, 3197, 111199, 111599, 0, 1400, 115200),
-                ],
-                // Cells cut along their diagonal at the end of two rows.
-                Complete: [2681, 2682], Mirror: [], MirrorZ: 0),
-                _ => null,
-            };
+        NativeWideHallWalls? hallWalls = level == 44 ? NativeWideGreatHallWalls(m, world) : null;
         // Toxic Waste starts in front of a hazard-striped doorway. Its jambs stop
         // below the top of the 16:9 view, and the dark wall face beside them,
         // fading to black, keeps one triangle per side. Each listed half cell is
@@ -174,130 +131,15 @@ public static partial class FramePacing
             && m.ReadU32(world.Header) == 8200 && m.ReadU32(world.Header + 4) == 6339
             && m.ReadU32(world.Header + 8) == 123690
             ? [new(653, []), new(658, [400]), new(650, [400, 800]), new(662, [400, 800])] : null;
-        // Toxic Waste ends in a room whose side walls (X 5600 and 10400) are a
-        // gauge pillar, a five-column braced panel and another pillar, from Z
-        // -23200 to -20400. Near the doorway, 16:9 sees past the jambs onto the
-        // front end of both walls, which the 4:3 cull left open: the right
-        // wall's last panel column and most of its pillar, the left wall's top
-        // row and acid band. The two walls are the same wall turned half a turn
-        // about the room's centre (X 8000, Z -21800), so the back end of each
-        // supplies the other's front end. The gap is 392 units, a cell 400: the
-        // copies go behind the scenery (NativeWideToxicEndRoom), the pillar's
-        // behind the panel's, so the overlaps keep the original cells.
-        // The other corridor meshes, and the end room's own doorways, get the
-        // chamfers cut past each doorway (NativeWideToxicDoors).
+        // Toxic Waste's end room and doorways, the Beach and the Lost City copy
+        // periods of original polygons (see the helpers). Their tables stay out
+        // of this method: Mono's ARM64 JIT aborts on a Vector3 store past a
+        // 16 KB stack frame, which their struct temporaries here exceeded.
         var toxicDoors = NativeWideToxicDoors(m, world);
-        NativeWideCopies? copies = level == 7 ? NativeWideToxicEndRoom(m, world) ? new(
-                [
-                    .. NativeWideToxicDoorCopies(toxicDoors ?? []),
-                    new(new(5600, 27599, -22800), new(5600, 30199, -22392), Vector3.Zero, MirrorX: 8000, MirrorZ: -21800),
-                    new(new(5600, 27599, -23200), new(5600, 28599, -22792), Vector3.Zero, MirrorX: 8000, MirrorZ: -21800, Rank: 1),
-                    new(new(5600, 28999, -23200), new(5600, 30199, -22792), Vector3.Zero, MirrorX: 8000, MirrorZ: -21800, Rank: 1),
-                    new(new(10400, 29799, -22808), new(10400, 30199, -22400), Vector3.Zero, MirrorX: 8000, MirrorZ: -21800),
-                    new(new(10400, 29799, -23200), new(10400, 30199, -22800), Vector3.Zero, MirrorX: 8000, MirrorZ: -21800, Rank: 1),
-                    new(new(10400, 27599, -22800), new(10400, 28199, -22400), Vector3.Zero, MirrorX: 8000, MirrorZ: -21800),
-                    new(new(10400, 27599, -23200), new(10400, 28199, -22800), Vector3.Zero, MirrorX: 8000, MirrorZ: -21800, Rank: 1),
-                ], []) : toxicDoors != null ? new([.. NativeWideToxicDoorCopies(toxicDoors)], []) : null
+        NativeWideCopies? copies = level == 7 ? NativeWideToxicCopies(m, world, toxicDoors)
             : level == 9 ? NativeWideBeachCopies(world, (int)m.ReadU32(world.Header),
                 (int)m.ReadU32(world.Header + 8))
-            // The Lost City starts at the west end of the temple walkway. Its floor
-            // and front wall stop just outside the 4:3 view, the jungle backdrop
-            // behind them a little further left. All of them repeat, so whole
-            // periods of original polygons are copied (absolute box, offset).
-            : level != 32 ? null
-            : (world.PolyCount, world.VertexCount, (int)m.ReadU32(world.Header), (int)m.ReadU32(world.Header + 8)) switch
-            {
-                (699, 725, 6768, -5999) => new(
-                [
-                    // Floor and front wall cells repeat every 1600 units. The
-                    // semi-transparent root decals on the floor stay behind.
-                    new(new(10000, -33600, -7), new(11600, -32400, 1593), new(-1600, 0, 0), Opaque: true),
-                    new(new(10000, -33600, -7), new(11600, -32400, 1593), new(-3200, 0, 0), Opaque: true),
-                    // Backdrop panels alternate every 3200 units between two
-                    // adjacent 64-halfword segments of an 8-bit page, so U + 128
-                    // reads the other panel with the same material.
-                    new(new(4400, -32800, -4007), new(7600, -29600, -4007), new(-3200, 0, 0), DU: 128),
-                    new(new(4400, -33600, -4007), new(6000, -32800, -4007), new(-1600, 0, 0), DU: 192),
-                    new(new(4400, -33600, -4007), new(6000, -32800, -4007), new(-3200, 0, 0), DU: 128),
-                    // Its bottom edge shows above the walkway's back edge where no
-                    // bushes stand in front. Reflect the bottom row below it.
-                    new(new(4400, -33600, -4007), new(6000, -32800, -4007), Vector3.Zero, MirrorY: -33600),
-                    new(new(4400, -33600, -4007), new(6000, -32800, -4007), new(-1600, 0, 0), DU: 192, MirrorY: -33600),
-                    new(new(4400, -33600, -4007), new(6000, -32800, -4007), new(-3200, 0, 0), DU: 128, MirrorY: -33600),
-                    // The upper backdrop runs the other way and is in the odd
-                    // segment here; polygon 0 has the even one and the same CLUT.
-                    new(new(4400, -30176, -5607), new(6000, -28576, -5607), new(-1600, 0, 0), DU: -64, Material: 0),
-                    new(new(4400, -30176, -5607), new(6000, -28576, -5607), new(-3200, 0, 0), Material: 0),
-                ], []),
-                // The upper backdrop lacks the panel hidden behind the temple roof
-                // in 4:3; the same panel appears one period (6400 units) earlier.
-                (3127, 3297, 22967, -5998) =>
-                    new([new(new(15599, -30176, -5606), new(17199, -28576, -5606), new(6400, 0, 0))], []),
-                // The climb: the shaft's side walls are only 1200-1600 units deep,
-                // with no front faces, so 16:9 sees past their near edges. Below
-                // the right wall the back wall stops at X 98793. Its last column
-                // pair is reflected, then repeated: the vertex colours stay
-                // continuous and the brazier glow further left is not copied.
-                // Mask pairs stay whole. The top row alternates two cells.
-                (2679, 2327, 93633, -5998) => new(
-                [
-                    new(new(97993, -34005, -6), new(98793, -28405, -6), Vector3.Zero, MirrorX: 98793),
-                    new(new(97993, -34005, -6), new(98793, -28405, -6), new(1600, 0, 0)),
-                    new(new(97593, -28405, -6), new(98393, -28005, -6), new(800, 0, 0)),
-                    new(new(97593, -28405, -6), new(98393, -28005, -6), new(1600, 0, 0)),
-                    new(new(97593, -28405, -6), new(97993, -28005, -6), new(2400, 0, 0)),
-                    // From below the right wall's bottom edge, the back wall shows
-                    // a little above it too.
-                    new(new(97593, -28805, -6), new(98393, -28005, -6), new(0, 800, 0)),
-                    new(new(97593, -28805, -6), new(98393, -28005, -6), new(800, 800, 0)),
-                    // The first platform's west end, at the left wall: its front
-                    // and top keep only cells from X 91593 (the top's first cell
-                    // is half); one 800 period (vertex colours) is copied west.
-                    // Its first merlon kept only its top; merlons repeat every 400.
-                    new(new(91593, -30405, 1594), new(92393, -30005, 1594), new(-800, 0, 0)),
-                    new(new(91593, -30005, 1194), new(91993, -30005, 1594), new(-800, 0, 0), Complete: true),
-                    new(new(91593, -30005, 1194), new(91993, -30005, 1594), Vector3.Zero, Complete: true),
-                    new(new(91993, -30005, 1194), new(92393, -30005, 1594), new(-800, 0, 0)),
-                    new(new(91617, -30005, 1218), new(91977, -29805, 1578), new(-400, 0, 0)),
-                ], [NativeWideXPlane(91193), NativeWideXPlane(97593)]),
-                // Above it, the right wall's top kept one triangle of its 800 cell;
-                // completed, it continues as far as the wall (Z 1994).
-                (2457, 2298, 93679, -5998) => new(
-                    [new(new(97599, -12006, 394), new(98399, -12006, 1194), Vector3.Zero, Complete: true)],
-                    [NativeWideXPlane(91199), NativeWideXPlane(97599),
-                        new(new(97599, -12006, 394), new(98399, -12006, 1194), Distance: 800)]),
-                // The level's end: Crash warps out on a pillar between two
-                // platforms, each with the same symmetric tower (centres X 800 and
-                // 8796). Only the lower right half of the left one survived the
-                // 4:3 cull; the right one's left half and top fill it. The left
-                // platform's floor, slanted pit wall and merlons all stop short of
-                // the camera; the merlons repeat every 400.
-                (3336, 3178, 15200, -5998) => new(
-                [
-                    new(new(7990, -12000, -3000), new(8800, -9200, -6), new(-7996, 0, 0)),
-                    new(new(8800, -10400, -6), new(9240, -9200, -6), new(-7996, 0, 0)),
-                    // The floor: a back row of identical cells and an 800 cell in
-                    // front of it, of which only half survived.
-                    new(new(800, -12000, -6), new(1600, -12000, 394), new(-800, 0, 0)),
-                    new(new(800, -12000, -6), new(1600, -12000, 394), new(-1600, 0, 0)),
-                    new(new(800, -12000, 394), new(1600, -12000, 1194), Vector3.Zero, Complete: true),
-                    new(new(800, -12000, 394), new(1600, -12000, 1194), new(-800, 0, 0), Complete: true),
-                    new(new(800, -12000, 394), new(1600, -12000, 1194), new(0, 0, 800), Complete: true),
-                    new(new(1600, -12400, 1234), new(2000, -12000, 1554), new(0, 0, 400)),
-                    new(new(1600, -12400, 1234), new(2000, -12000, 1554), new(0, 0, 800)),
-                ],
-                // The pit wall; the merlons on it reach X 1992.
-                [new(new(1590, -14400, -3000), new(1990, -12000, 1600))],
-                // The broken leaning column far behind it lost the lower two
-                // cells of its west face: the middle one kept one triangle, the
-                // bottom one ends at the next face's edge (X -1096 Y -14808).
-                Places:
-                [
-                    new(345, new(-1400, -12424, -5110), new(-712, -12520, -5398), new(-856, -13424, -5478)),
-                    new(345, new(-1544, -13328, -5190), new(-856, -13424, -5478), new(-1096, -14808, -5598)),
-                ]),
-                _ => null,
-            };
+            : level == 32 ? NativeWideLostCityCopies(m, world) : null;
         bool scenery = gate || fortress || jungle || castle || slippery || upstream || creek || creekNext || hog
             || hallWalls != null || doorCells != null || copies != null;
         if (!scenery) return Array.Empty<NativeWideRepair>();
@@ -488,6 +330,183 @@ public static partial class FramePacing
         PaceLog($"native-wide level={level} scenery repairs={repairs.Count}");
         return _nativeWideSceneryRepairs[key] = repairs;
     }
+
+    // The Great Hall's end walls stop at the 4:3 edge as they approach the
+    // camera: the hall's left and right ends, and the right wall where the
+    // second gallery turns. Their stone cells repeat, so a block of original
+    // cells is copied along Z instead (no seams, no coplanar overlap between
+    // copies). Absolute X plane, Y and Z range of the block, Y offset, first
+    // Z shift; copies step by the block length until the wall passes the
+    // camera's nearest path point.
+    static NativeWideHallWalls? NativeWideGreatHallWalls(IMemory m, NativeWideWorld world) =>
+        (world.PolyCount, world.VertexCount, (int)m.ReadU32(world.Header), (int)m.ReadU32(world.Header + 8)) switch
+        {
+            (2466, 2395, 15063, 126774) => new(
+            [
+                // Right end: three cells per period; the grid restarts after the column.
+                new(22799, 797, 6685, 121198, 122798, 0, 2400, 127200),
+                // Left end, beside and above its window.
+                new(5599, 2397, 3997, 122798, 124398, 0, 1600, 127200),
+                new(5599, 3997, 5597, 123998, 124398, 0, 400, 127200),
+                new(5599, 4797, 5597, 123998, 124398, 800, 0, 127200),
+                new(5599, 6397, 6997, 122798, 123398, 0, 600, 127200),
+            ],
+            // The window keeps only the far half of its arch surround.
+            Complete: [2399, 2410], Mirror: [112, 113, 114], MirrorZ: 123398,
+            // Behind the near column the right end wall was left open between
+            // Z 119598 and 121198 (only a few cells and two half cells remain),
+            // which 16:9 sees past the column. One period of the same three
+            // columns, each column stretched to its own width (536/528 swap).
+            Spans:
+            [
+                new(22799, 3197, 7701, 121198, 121734, 119598, 120134),
+                new(22799, 4829, 7701, 121734, 122270, 120134, 120662),
+                new(22799, 2397, 5725, 122270, 122798, 120662, 121198),
+            ]),
+            (3148, 3050, 27889, 111327) => new(
+            [
+                // Second gallery's right wall: one column per period. Each row
+                // continues after its own last cell.
+                new(35193, 5597, 6397, 111199, 111599, 0, 400, 115200),
+                new(35193, 3197, 5597, 111199, 111599, 0, 800, 115200),
+                new(35193, 2397, 3197, 111199, 111599, 0, 1400, 115200),
+            ],
+            // Cells cut along their diagonal at the end of two rows.
+            Complete: [2681, 2682], Mirror: [], MirrorZ: 0),
+            _ => null,
+        };
+
+    // Toxic Waste ends in a room whose side walls (X 5600 and 10400) are a
+    // gauge pillar, a five-column braced panel and another pillar, from Z
+    // -23200 to -20400. Near the doorway, 16:9 sees past the jambs onto the
+    // front end of both walls, which the 4:3 cull left open: the right
+    // wall's last panel column and most of its pillar, the left wall's top
+    // row and acid band. The two walls are the same wall turned half a turn
+    // about the room's centre (X 8000, Z -21800), so the back end of each
+    // supplies the other's front end. The gap is 392 units, a cell 400: the
+    // copies go behind the scenery (NativeWideToxicEndRoom), the pillar's
+    // behind the panel's, so the overlaps keep the original cells.
+    // The other corridor meshes, and the end room's own doorways, get the
+    // chamfers cut past each doorway (NativeWideToxicDoors).
+    static NativeWideCopies? NativeWideToxicCopies(IMemory m, NativeWideWorld world, NativeWideToxicDoor[]? toxicDoors) =>
+        NativeWideToxicEndRoom(m, world) ? new(
+            [
+                .. NativeWideToxicDoorCopies(toxicDoors ?? []),
+                new(new(5600, 27599, -22800), new(5600, 30199, -22392), Vector3.Zero, MirrorX: 8000, MirrorZ: -21800),
+                new(new(5600, 27599, -23200), new(5600, 28599, -22792), Vector3.Zero, MirrorX: 8000, MirrorZ: -21800, Rank: 1),
+                new(new(5600, 28999, -23200), new(5600, 30199, -22792), Vector3.Zero, MirrorX: 8000, MirrorZ: -21800, Rank: 1),
+                new(new(10400, 29799, -22808), new(10400, 30199, -22400), Vector3.Zero, MirrorX: 8000, MirrorZ: -21800),
+                new(new(10400, 29799, -23200), new(10400, 30199, -22800), Vector3.Zero, MirrorX: 8000, MirrorZ: -21800, Rank: 1),
+                new(new(10400, 27599, -22800), new(10400, 28199, -22400), Vector3.Zero, MirrorX: 8000, MirrorZ: -21800),
+                new(new(10400, 27599, -23200), new(10400, 28199, -22800), Vector3.Zero, MirrorX: 8000, MirrorZ: -21800, Rank: 1),
+            ], []) : toxicDoors != null ? new([.. NativeWideToxicDoorCopies(toxicDoors)], []) : null;
+
+    // The Lost City starts at the west end of the temple walkway. Its floor
+    // and front wall stop just outside the 4:3 view, the jungle backdrop
+    // behind them a little further left. All of them repeat, so whole
+    // periods of original polygons are copied (absolute box, offset).
+    static NativeWideCopies? NativeWideLostCityCopies(IMemory m, NativeWideWorld world) =>
+        (world.PolyCount, world.VertexCount, (int)m.ReadU32(world.Header), (int)m.ReadU32(world.Header + 8)) switch
+        {
+            (699, 725, 6768, -5999) => NativeWideLostCityStart(),
+            // The upper backdrop lacks the panel hidden behind the temple roof
+            // in 4:3; the same panel appears one period (6400 units) earlier.
+            (3127, 3297, 22967, -5998) =>
+                new([new(new(15599, -30176, -5606), new(17199, -28576, -5606), new(6400, 0, 0))], []),
+            // The climb: the shaft's side walls are only 1200-1600 units deep,
+            // with no front faces, so 16:9 sees past their near edges. Below
+            // the right wall the back wall stops at X 98793. Its last column
+            // pair is reflected, then repeated: the vertex colours stay
+            // continuous and the brazier glow further left is not copied.
+            // Mask pairs stay whole. The top row alternates two cells.
+            (2679, 2327, 93633, -5998) => NativeWideLostCityClimb(),
+            // Above it, the right wall's top kept one triangle of its 800 cell;
+            // completed, it continues as far as the wall (Z 1994).
+            (2457, 2298, 93679, -5998) => new(
+                [new(new(97599, -12006, 394), new(98399, -12006, 1194), Vector3.Zero, Complete: true)],
+                [NativeWideXPlane(91199), NativeWideXPlane(97599),
+                    new(new(97599, -12006, 394), new(98399, -12006, 1194), Distance: 800)]),
+            // The level's end: Crash warps out on a pillar between two
+            // platforms, each with the same symmetric tower (centres X 800 and
+            // 8796). Only the lower right half of the left one survived the
+            // 4:3 cull; the right one's left half and top fill it. The left
+            // platform's floor, slanted pit wall and merlons all stop short of
+            // the camera; the merlons repeat every 400.
+            (3336, 3178, 15200, -5998) => NativeWideLostCityEnd(),
+            _ => null,
+        };
+
+    // The Lost City's larger tables, each in its own method for Mono's JIT
+    // (see NativeWideAssetRepairs).
+    static NativeWideCopies NativeWideLostCityStart() => new(
+        [
+            // Floor and front wall cells repeat every 1600 units. The
+            // semi-transparent root decals on the floor stay behind.
+            new(new(10000, -33600, -7), new(11600, -32400, 1593), new(-1600, 0, 0), Opaque: true),
+            new(new(10000, -33600, -7), new(11600, -32400, 1593), new(-3200, 0, 0), Opaque: true),
+            // Backdrop panels alternate every 3200 units between two
+            // adjacent 64-halfword segments of an 8-bit page, so U + 128
+            // reads the other panel with the same material.
+            new(new(4400, -32800, -4007), new(7600, -29600, -4007), new(-3200, 0, 0), DU: 128),
+            new(new(4400, -33600, -4007), new(6000, -32800, -4007), new(-1600, 0, 0), DU: 192),
+            new(new(4400, -33600, -4007), new(6000, -32800, -4007), new(-3200, 0, 0), DU: 128),
+            // Its bottom edge shows above the walkway's back edge where no
+            // bushes stand in front. Reflect the bottom row below it.
+            new(new(4400, -33600, -4007), new(6000, -32800, -4007), Vector3.Zero, MirrorY: -33600),
+            new(new(4400, -33600, -4007), new(6000, -32800, -4007), new(-1600, 0, 0), DU: 192, MirrorY: -33600),
+            new(new(4400, -33600, -4007), new(6000, -32800, -4007), new(-3200, 0, 0), DU: 128, MirrorY: -33600),
+            // The upper backdrop runs the other way and is in the odd
+            // segment here; polygon 0 has the even one and the same CLUT.
+            new(new(4400, -30176, -5607), new(6000, -28576, -5607), new(-1600, 0, 0), DU: -64, Material: 0),
+            new(new(4400, -30176, -5607), new(6000, -28576, -5607), new(-3200, 0, 0), Material: 0),
+        ], []);
+
+    static NativeWideCopies NativeWideLostCityClimb() => new(
+        [
+            new(new(97993, -34005, -6), new(98793, -28405, -6), Vector3.Zero, MirrorX: 98793),
+            new(new(97993, -34005, -6), new(98793, -28405, -6), new(1600, 0, 0)),
+            new(new(97593, -28405, -6), new(98393, -28005, -6), new(800, 0, 0)),
+            new(new(97593, -28405, -6), new(98393, -28005, -6), new(1600, 0, 0)),
+            new(new(97593, -28405, -6), new(97993, -28005, -6), new(2400, 0, 0)),
+            // From below the right wall's bottom edge, the back wall shows
+            // a little above it too.
+            new(new(97593, -28805, -6), new(98393, -28005, -6), new(0, 800, 0)),
+            new(new(97593, -28805, -6), new(98393, -28005, -6), new(800, 800, 0)),
+            // The first platform's west end, at the left wall: its front
+            // and top keep only cells from X 91593 (the top's first cell
+            // is half); one 800 period (vertex colours) is copied west.
+            // Its first merlon kept only its top; merlons repeat every 400.
+            new(new(91593, -30405, 1594), new(92393, -30005, 1594), new(-800, 0, 0)),
+            new(new(91593, -30005, 1194), new(91993, -30005, 1594), new(-800, 0, 0), Complete: true),
+            new(new(91593, -30005, 1194), new(91993, -30005, 1594), Vector3.Zero, Complete: true),
+            new(new(91993, -30005, 1194), new(92393, -30005, 1594), new(-800, 0, 0)),
+            new(new(91617, -30005, 1218), new(91977, -29805, 1578), new(-400, 0, 0)),
+        ], [NativeWideXPlane(91193), NativeWideXPlane(97593)]);
+
+    static NativeWideCopies NativeWideLostCityEnd() => new(
+        [
+            new(new(7990, -12000, -3000), new(8800, -9200, -6), new(-7996, 0, 0)),
+            new(new(8800, -10400, -6), new(9240, -9200, -6), new(-7996, 0, 0)),
+            // The floor: a back row of identical cells and an 800 cell in
+            // front of it, of which only half survived.
+            new(new(800, -12000, -6), new(1600, -12000, 394), new(-800, 0, 0)),
+            new(new(800, -12000, -6), new(1600, -12000, 394), new(-1600, 0, 0)),
+            new(new(800, -12000, 394), new(1600, -12000, 1194), Vector3.Zero, Complete: true),
+            new(new(800, -12000, 394), new(1600, -12000, 1194), new(-800, 0, 0), Complete: true),
+            new(new(800, -12000, 394), new(1600, -12000, 1194), new(0, 0, 800), Complete: true),
+            new(new(1600, -12400, 1234), new(2000, -12000, 1554), new(0, 0, 400)),
+            new(new(1600, -12400, 1234), new(2000, -12000, 1554), new(0, 0, 800)),
+        ],
+        // The pit wall; the merlons on it reach X 1992.
+        [new(new(1590, -14400, -3000), new(1990, -12000, 1600))],
+        // The broken leaning column far behind it lost the lower two
+        // cells of its west face: the middle one kept one triangle, the
+        // bottom one ends at the next face's edge (X -1096 Y -14808).
+        Places:
+        [
+            new(345, new(-1400, -12424, -5110), new(-712, -12520, -5398), new(-856, -13424, -5478)),
+            new(345, new(-1544, -13328, -5190), new(-856, -13424, -5478), new(-1096, -14808, -5598)),
+        ]);
 
     readonly record struct NativeWideWallBlock(float X, float YLow, float YHigh, float ZFrom, float ZTo,
         float DY, float Shift, float Until);
