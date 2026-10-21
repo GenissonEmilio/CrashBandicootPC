@@ -207,3 +207,9 @@ tools/CrashBandicoot.TimingProbe/README.md
 *.7z
 *.rar
 /tools/desktop/release/*.tar.*
+!tools/desktop/release/
+!tools/desktop/release/Dockerfile
+!tools/desktop/release/Test.Dockerfile
+!tools/desktop/release/*.sh
+!tools/desktop/release/*.py
+!tools/desktop/release/*.spec
