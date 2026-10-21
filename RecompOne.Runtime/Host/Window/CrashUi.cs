@@ -320,11 +320,16 @@ internal static class CrashUi
         return close;
     }
 
+    /// <summary>Gutter icon of a <see cref="Row"/>; None = the Wumpa cursor when hot.</summary>
+    public enum RowIcon { None, Resume, SaveState, LoadState, Settings, Map, Leave }
+
     /// <summary>
     /// Launcher menu row: Bungee label, Wumpa cursor and slide-in when hot. Old style:
     /// gray selectable with a yellow ">" gutter. <paramref name="tag"/> = small right text.
+    /// With an <paramref name="icon"/> the gutter always shows it, dark gray until hot.
     /// </summary>
-    public static bool Row(string label, string id, float ui, bool enabled = true, string? tag = null, float px = 20f)
+    public static bool Row(string label, string id, float ui, bool enabled = true, string? tag = null, float px = 20f,
+        RowIcon icon = RowIcon.None)
     {
         if (!Enabled) return ClassicRow(tag == null ? label : $"{label} ({tag})", id, enabled);
 
@@ -340,17 +345,25 @@ internal static class CrashUi
         var min = ImGui.GetItemRectMin();
         var max = ImGui.GetItemRectMax();
         var dl = ImGui.GetWindowDrawList();
+        // Leaving the game is the one red row.
+        bool danger = icon == RowIcon.Leave;
+        var accent = danger ? Danger : Wumpa;
+        var accentHot = danger ? Danger : WumpaHot;
         if (t > 0.01f)
         {
             dl.AddRectFilledMultiColor(min, max,
-                U32(Wumpa, 0.24f * t), U32(Wumpa, 0f), U32(Wumpa, 0f), U32(Wumpa, 0.24f * t));
-            dl.AddRectFilled(min, new Vector2(min.X + 3f * ui, max.Y), U32(WumpaHot, t));
+                U32(accent, 0.24f * t), U32(accent, 0f), U32(accent, 0f), U32(accent, 0.24f * t));
+            dl.AddRectFilled(min, new Vector2(min.X + 3f * ui, max.Y), U32(accentHot, t));
             // Cursor gutter scales with the row font (pause 20 px, Dev Menu 15 px).
-            DrawWumpa(dl, new Vector2(min.X + size * 0.7f, (min.Y + max.Y) * 0.5f + ui),
-                size * 0.3f * (0.6f + 0.4f * t), t);
+            if (icon == RowIcon.None)
+                DrawWumpa(dl, new Vector2(min.X + size * 0.7f, (min.Y + max.Y) * 0.5f + ui),
+                    size * 0.3f * (0.6f + 0.4f * t), t);
         }
+        if (icon != RowIcon.None)
+            DrawIcon(dl, icon, new Vector2(min.X + size * 0.72f, (min.Y + max.Y) * 0.5f), size * 0.42f,
+                t, IconPhase(id, t), enabled, ui);
 
-        var color = enabled ? Vector4.Lerp(Sand, WumpaHot, t) : Disabled;
+        var color = enabled ? Vector4.Lerp(Sand, accentHot, t) : Disabled;
         var pos = new Vector2(min.X + size * 1.45f + 6f * t * ui, min.Y + (h - size) * 0.5f);
         ShadowText(dl, Display(size), size, pos, color, label.TrimEnd('.').ToUpperInvariant(), ui);
 
@@ -675,6 +688,151 @@ internal static class CrashUi
         dl.AddCircleFilled(c, r, U32(Rgb(196, 84, 0), alpha));
         dl.AddCircleFilled(c - new Vector2(0.12f * r), r * 0.84f, U32(Wumpa, alpha));
         dl.AddCircleFilled(c - new Vector2(0.38f * r), r * 0.26f, U32(Rgb(255, 226, 150), alpha));
+    }
+
+    static readonly Vector4 IconIdle = Rgb(96, 94, 86);
+    static readonly Vector4 IconIdleDark = Rgb(74, 72, 66);
+    static readonly Vector4 IconIdleDeep = Rgb(46, 44, 40);
+    static readonly Vector4 IconOff = Rgb(64, 62, 56, 0.7f);
+    static readonly Vector4 Go = Rgb(96, 208, 72);
+    static readonly Vector4 Danger = Rgb(255, 72, 56);
+    static readonly Dictionary<string, float> _iconPhase = new();
+
+    /// <summary>Seconds of hover, weighted by the hover ease: animations slow to a stop.</summary>
+    static float IconPhase(string id, float t)
+    {
+        _iconPhase.TryGetValue(id, out float p);
+        p = (p + Math.Min(ImGui.GetIO().DeltaTime, 0.1f) * t) % 3600f;
+        _iconPhase[id] = p;
+        return p;
+    }
+
+    /// <summary>Row icon with a drop shadow; idle dark gray, colored and animated when hot.</summary>
+    static void DrawIcon(ImDrawListPtr dl, RowIcon icon, Vector2 c, float r, float t, float phase, bool enabled, float ui)
+    {
+        if (!enabled) t = 0f;
+        IconShape(dl, icon, c + new Vector2(0f, 2f * ui), r, t, phase, enabled, shadow: true);
+        IconShape(dl, icon, c, r, t, phase, enabled, shadow: false);
+    }
+
+    /// <summary>One pass of a row icon. The shadow pass draws only the silhouette.</summary>
+    static void IconShape(ImDrawListPtr dl, RowIcon icon, Vector2 c, float r, float t, float phase, bool enabled, bool shadow)
+    {
+        uint P(Vector4 hot, Vector4 idle) =>
+            shadow ? U32(Vector4.Zero, 0.55f) : U32(enabled ? Vector4.Lerp(idle, hot, t) : IconOff);
+        Vector2 V(float x, float y) => c + new Vector2(x, y) * r;
+
+        switch (icon)
+        {
+            case RowIcon.Resume:
+            {
+                // Play triangle that pulses, with a fading ghost sliding out behind it.
+                float s = 1f + 0.08f * MathF.Sin(phase * 7f) * t;
+                var o = new Vector2(0.08f, 0f);
+                if (!shadow && t > 0.01f)
+                {
+                    var g = o - new Vector2(0.45f * t, 0f);
+                    dl.AddTriangleFilled(V(g.X - 0.6f * s, -0.85f * s), V(g.X + 0.85f * s, 0f),
+                        V(g.X - 0.6f * s, 0.85f * s), U32(Go, 0.3f * t));
+                }
+                dl.AddTriangleFilled(V(o.X - 0.6f * s, -0.85f * s), V(o.X + 0.85f * s, 0f),
+                    V(o.X - 0.6f * s, 0.85f * s), P(Go, IconIdle));
+                break;
+            }
+            case RowIcon.SaveState:
+            case RowIcon.LoadState:
+            {
+                // Arrow into (save) or out of (load) a tray; the arrow bobs when hot.
+                uint col = P(WumpaHot, IconIdle);
+                float th = Math.Max(1.5f, 0.2f * r);
+                dl.PathLineTo(V(-0.8f, 0.3f));
+                dl.PathLineTo(V(-0.8f, 0.85f));
+                dl.PathLineTo(V(0.8f, 0.85f));
+                dl.PathLineTo(V(0.8f, 0.3f));
+                dl.PathStroke(col, ImDrawFlags.None, th);
+                float bob = 0.16f * MathF.Sin(phase * 8f) * t;
+                float shaft = th * 1.1f;
+                if (icon == RowIcon.SaveState)
+                {
+                    dl.AddLine(V(0f, -0.95f + bob), V(0f, 0.05f + bob), col, shaft);
+                    dl.AddTriangleFilled(V(-0.38f, bob), V(0.38f, bob), V(0f, 0.48f + bob), col);
+                }
+                else
+                {
+                    dl.AddLine(V(0f, 0.45f + bob), V(0f, -0.5f + bob), col, shaft);
+                    dl.AddTriangleFilled(V(0.38f, -0.45f + bob), V(-0.38f, -0.45f + bob), V(0f, -0.95f + bob), col);
+                }
+                break;
+            }
+            case RowIcon.Settings:
+            {
+                // Gear that spins while hot and coasts to a stop.
+                float a = phase * 2.6f;
+                uint col = P(WumpaHot, IconIdle);
+                const int teeth = 8;
+                for (int i = 0; i < teeth; i++)
+                {
+                    float ang = a + i * MathF.Tau / teeth;
+                    var dir = new Vector2(MathF.Cos(ang), MathF.Sin(ang)) * r;
+                    var side = new Vector2(-dir.Y, dir.X);
+                    dl.AddQuadFilled(c + dir * 0.6f - side * 0.2f, c + dir - side * 0.13f,
+                        c + dir + side * 0.13f, c + dir * 0.6f + side * 0.2f, col);
+                }
+                dl.AddCircle(c, 0.5f * r, col, 24, 0.4f * r); // body ring 0.3r..0.7r
+                break;
+            }
+            case RowIcon.Map:
+            {
+                // Folded pirate map; when hot the dotted trail marches to a pulsing red X.
+                float[] xs = { -0.9f, -0.3f, 0.3f, 0.9f };
+                float Top(int k) => k % 2 == 0 ? -0.72f : -0.88f;
+                for (int i = 0; i < 3; i++)
+                {
+                    uint fill = i % 2 == 0
+                        ? P(Rgb(236, 208, 152), IconIdle)
+                        : P(Rgb(204, 168, 108), IconIdleDark);
+                    dl.AddQuadFilled(V(xs[i], Top(i)), V(xs[i + 1], Top(i + 1)),
+                        V(xs[i + 1], Top(i + 1) + 1.6f), V(xs[i], Top(i) + 1.6f), fill);
+                }
+                if (shadow) break;
+
+                uint dot = P(Rgb(120, 62, 20), IconIdleDeep);
+                var p0 = new Vector2(-0.62f, 0.5f);
+                var p1 = new Vector2(-0.2f, -0.7f);
+                var p2 = new Vector2(0.48f, -0.18f);
+                const int dots = 5;
+                float march = phase * 1.5f % 1f;
+                for (int k = 0; k < dots; k++)
+                {
+                    float u = (k + march) / dots * 0.8f;
+                    var q = (1 - u) * (1 - u) * p0 + 2 * (1 - u) * u * p1 + u * u * p2;
+                    dl.AddCircleFilled(V(q.X, q.Y), Math.Max(1f, 0.08f * r), dot);
+                }
+                float xr = 0.2f * (1f + 0.3f * MathF.Sin(phase * 8f) * t);
+                uint xc = P(MarkRed, IconIdleDeep);
+                float xt = Math.Max(1.5f, 0.14f * r);
+                dl.AddLine(V(p2.X - xr, p2.Y - xr), V(p2.X + xr, p2.Y + xr), xc, xt);
+                dl.AddLine(V(p2.X - xr, p2.Y + xr), V(p2.X + xr, p2.Y - xr), xc, xt);
+                break;
+            }
+            case RowIcon.Leave:
+            {
+                // Red X: quarter turn as the hover eases in, then a light pulse.
+                float a = t * MathF.PI * 0.5f;
+                float s = 1f + 0.1f * MathF.Sin(phase * 9f) * t;
+                uint col = P(Danger, IconIdle);
+                float th = Math.Max(2f, 0.3f * r);
+                for (int i = 0; i < 2; i++)
+                {
+                    float ang = a + MathF.PI * 0.25f + i * MathF.PI * 0.5f;
+                    var d = new Vector2(MathF.Cos(ang), MathF.Sin(ang)) * (0.75f * r * s);
+                    dl.AddLine(c - d, c + d, col, th);
+                    dl.AddCircleFilled(c - d, th * 0.5f, col);
+                    dl.AddCircleFilled(c + d, th * 0.5f, col);
+                }
+                break;
+            }
+        }
     }
 
     static float Ease(string id, bool hot)

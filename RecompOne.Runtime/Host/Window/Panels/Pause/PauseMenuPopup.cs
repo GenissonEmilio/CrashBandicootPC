@@ -111,7 +111,7 @@ internal sealed class PauseMenuPopup : IPanel
 
         CrashUi.Header("Crash Recompiled", "Paused", ui);
 
-        if (CrashUi.Row("Resume", "resume", ui))
+        if (CrashUi.Row("Resume", "resume", ui, icon: CrashUi.RowIcon.Resume))
             open = false;
 
         bool saveStates = Config.ConfigManager.View.SaveStates;
@@ -119,10 +119,11 @@ internal sealed class PauseMenuPopup : IPanel
             open = false;
 
         // Settings replaces the rows inside this card, so gameplay input stays muted.
-        if (CrashUi.Row("Settings", "settings", ui))
+        if (CrashUi.Row("Settings", "settings", ui, icon: CrashUi.RowIcon.Settings))
             _settingsPage = true;
 
-        if (CrashUi.Row("Exit to Map...", "exit-map", ui, enabled: !CheatManager.IsOnTitleMenuMap()))
+        if (CrashUi.Row("Exit to Map...", "exit-map", ui, enabled: !CheatManager.IsOnTitleMenuMap(),
+                icon: CrashUi.RowIcon.Map))
         {
             // Native Crash 1 path: Start (pause) → Select (return to map).
             ExitToMapInjector.Begin();
@@ -130,7 +131,7 @@ internal sealed class PauseMenuPopup : IPanel
         }
 
         string leaveLabel = HostWindow.IsEmbedded ? "Return to Launcher" : "Quit";
-        if (CrashUi.Row(leaveLabel, "leave", ui))
+        if (CrashUi.Row(leaveLabel, "leave", ui, icon: CrashUi.RowIcon.Leave))
         {
             open = false;
             // Never Close() mid-ImGui frame — defer to Present after DoRender.
@@ -199,13 +200,14 @@ internal sealed class PauseMenuPopup : IPanel
         bool close = false;
         string tag = $"Slot {slot}";
 
-        if (CrashUi.Row("Save State", "state-save", ui, tag: tag))
+        if (CrashUi.Row("Save State", "state-save", ui, tag: tag, icon: CrashUi.RowIcon.SaveState))
         {
             SaveStates.RequestSave(slot);
             close = true;
         }
 
-        if (CrashUi.Row("Load State", "state-load", ui, enabled: info is { Compatible: true }, tag: tag))
+        if (CrashUi.Row("Load State", "state-load", ui, enabled: info is { Compatible: true }, tag: tag,
+            icon: CrashUi.RowIcon.LoadState))
         {
             SaveStates.RequestLoad(slot);
             close = true;
