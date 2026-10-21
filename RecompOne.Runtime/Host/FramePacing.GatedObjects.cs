@@ -551,6 +551,8 @@ public static partial class FramePacing
             // dropped the carry mid-ride and the plat slid out from under him.
             if (!airborne && !IsRiverRideSurface(m, obj))
                 return false;
+            // Touchdown present: still the fall state, bound lifted (#162).
+            int slop = LandingSlop(m, crash);
             if (_rideObj == obj && _gateRot.TryGetValue(obj, out GatePose pose))
             {
                 // The clock has advanced, but carry has not been applied yet.
@@ -560,9 +562,9 @@ public static partial class FramePacing
                 return !CrashOnPlatPos(m, obj, crash,
                     LerpPos(pose.Px, pose.Qx, _ridePhase),
                     LerpPos(pose.Py, pose.Qy, _ridePhase),
-                    LerpPos(pose.Pz, pose.Qz, _ridePhase));
+                    LerpPos(pose.Pz, pose.Qz, _ridePhase), slop);
             }
-            return !CrashStandingOnPlat(m, obj, crash);
+            return !CrashStandingOnPlat(m, obj, crash, slop);
         }
         catch
         {
@@ -819,6 +821,8 @@ public static partial class FramePacing
         if (!TryReadCrash(m, out uint crash)) return;
         if (_rideObj == 0)
             TryAttachRiverRide(m, crash);
+        if (_rideObj == 0)
+            TryAttachPathPlatRide(m, crash);
         if (_rideObj == 0) return;
         if (CrashLeftRide(m, _rideObj, crash))
         {
@@ -877,6 +881,79 @@ public static partial class FramePacing
         _rideAppY = (int)Math.Round(_rideRemY * phase);
         _rideAppZ = (int)Math.Round(_rideRemZ * phase);
         _ridePhase = phase;
+    }
+
+    /// <summary>
+    /// #162: Crash lands on the drawn path plat partway through its 30 Hz
+    /// step, but the carry started only at the plat's next Update. Until then
+    /// the plat slid on under a standing Crash, up to one step (36 units on
+    /// the Rolling Stones pillars); 30 FPS carries him from the next frame,
+    /// with no slide. Join the ride at touchdown with the rest of the current
+    /// step, like river leaves. PoPlC Active/Auto only; Temple Ruins / Jaws
+    /// plats also turn Crash, which this translation alone would not do.
+    /// </summary>
+    static void TryAttachPathPlatRide(IMemory m, uint crash)
+    {
+        if (_exactTicks >= RefTicks - 0.01) return;
+        try
+        {
+            uint level = m.ReadU32(Catalog.LevelIdAddr);
+            if (level == LidTempleRuins || level == LidJawsOfDarkness) return;
+            // GROUNDLAND, not CrashAirborne: the touchdown present is still in
+            // the fall state, and waiting one present lost that much carry.
+            if (!CrashCanRide(m, crash) || (int)m.ReadU32(crash + ObjVelYOff) > 0
+                || (m.ReadU32(crash + ObjStatusAOff) & FlagGroundLand) == 0) return;
+            // Landing squash: bound bottom above the feet (see CrashLandingOnPlat).
+            int slop = LandingSlop(m, crash);
+            foreach (var pair in _gateRot)
+            {
+                uint obj = pair.Key;
+                if ((obj & 0xFF000000u) != 0x80000000u || m.ReadU32(obj) is 0 or 2) continue;
+                if (!TryReadGoolClass(m, obj, out uint type, out _) || type != GoolTypePoPl) continue;
+                uint state = m.ReadU32(obj + ObjStateOff);
+                if (state != StatePoPlActive && state != StatePoPlAuto) continue;
+                if (!IsGatedRideSolid(m, obj)) continue;
+                GatePose pose = pair.Value;
+                long dx = (long)pose.Qx - pose.Px;
+                long dy = (long)pose.Qy - pose.Py;
+                long dz = (long)pose.Qz - pose.Pz;
+                if (dx == 0 && dy == 0 && dz == 0) continue;
+                if (Math.Abs(dx) > VelTeleport || Math.Abs(dy) > VelTeleport
+                    || Math.Abs(dz) > VelTeleport) continue;
+                if (!TryGetGatePhase(m, obj, out double ticks)) continue;
+                double t = Math.Clamp(ticks / RefTicks, 0, 1);
+                int py = LerpPos(pose.Py, pose.Qy, t);
+                if (!CrashOnPlatPos(m, obj, crash, LerpPos(pose.Px, pose.Qx, t),
+                        py, LerpPos(pose.Pz, pose.Qz, t), slop))
+                    continue;
+                // Feet (trans y: the floor test rests it on the top) on the
+                // top, not beside or under the plat.
+                if (!_lastBound.TryGetValue(obj, out BoundSnap bound)) continue;
+                long top = Math.Max(bound.Y1, bound.Y2) + (long)py - pose.Py;
+                long feet = (int)m.ReadU32(crash + ObjTransOff + 4);
+                // The snap is at P or Q depending on the gate phase: one step.
+                if (Math.Abs(feet - top) > EmbedSlop + Math.Abs(dy)) continue;
+                _rideObj = obj;
+                _rideRemX = dx;
+                _rideRemY = dy;
+                _rideRemZ = dz;
+                // Crash already stands on this phase's pose: carry only the rest.
+                _rideAppX = (int)Math.Round(dx * t);
+                _rideAppY = (int)Math.Round(dy * t);
+                _rideAppZ = (int)Math.Round(dz * t);
+                _ridePhase = t;
+                if (_rideLog < 8)
+                {
+                    _rideLog++;
+                    PaceLog($"ride join 0x{obj:X8} t={t:0.00} d={dx},{dz}");
+                }
+                return;
+            }
+        }
+        catch
+        {
+            // object freed / overlay swap
+        }
     }
 
     /// <summary>

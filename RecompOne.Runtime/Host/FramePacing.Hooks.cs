@@ -599,7 +599,8 @@ public static partial class FramePacing
             uint crash = m.ReadU32(CrashPtrAddr);
             if (crash == 0 || (crash & 0xFF000000u) != 0x80000000u) return;
             bool standing = CrashStandingOnPlat(m, obj, crash)
-                || (type == GoolTypeGems && CrashGroundedOnGem(m, obj, crash));
+                || (type == GoolTypeGems && CrashGroundedOnGem(m, obj, crash))
+                || CrashLandingOnPlat(m, obj, crash);
             if (!standing || CrashLeftRide(m, obj, crash)) return;
             m.WriteU32(obj + ObjColliderOff, crash);
             if (_platColLog >= 8) return;
@@ -648,24 +649,51 @@ public static partial class FramePacing
         }
     }
 
-    static bool CrashOnSolidTop(IMemory m, uint obj, uint crash)
+    static bool CrashOnSolidTop(IMemory m, uint obj, uint crash, int slop = EmbedSlop)
     {
         int px = (int)m.ReadU32(obj + ObjTransOff);
         int py = (int)m.ReadU32(obj + ObjTransOff + 4);
         int pz = (int)m.ReadU32(obj + ObjTransOff + 8);
-        return CrashOnPlatPos(m, obj, crash, px, py, pz);
+        return CrashOnPlatPos(m, obj, crash, px, py, pz, slop);
     }
 
     /// <summary>
     /// Logic AABB or the skip-frame visual lerp. Interpret leftover t is ~0
     /// so they match; skip Crash can sit on the drawn pose while trans is Q.
     /// </summary>
-    static bool CrashStandingOnPlat(IMemory m, uint obj, uint crash)
+    static bool CrashStandingOnPlat(IMemory m, uint obj, uint crash, int slop = EmbedSlop)
     {
-        if (CrashOnSolidTop(m, obj, crash)) return true;
+        if (CrashOnSolidTop(m, obj, crash, slop)) return true;
         if (!TryGatedSolidVisual(m, obj, out int vx, out int vy, out int vz))
             return false;
-        return CrashOnPlatPos(m, obj, crash, vx, vy, vz);
+        return CrashOnPlatPos(m, obj, crash, vx, vy, vz, slop);
+    }
+
+    /// <summary>
+    /// #162: the WillC landing squash lifts the bottom of Crash's bound above
+    /// his feet (42 units at touchdown, back to 0 about 6 frames later) while
+    /// his trans already rests on the plat top. The bottom test then failed
+    /// for those Updates. In the same-stamp phase the plat's Bound had cleared
+    /// <c>collider</c>, nothing refilled it, CarryCollider skipped, and the plat
+    /// slid away under a grounded Crash (Rolling Stones pillars): late carry,
+    /// or a fall off the edge. Grounded only; allow that lift as slop.
+    /// </summary>
+    static bool CrashLandingOnPlat(IMemory m, uint plat, uint crash)
+    {
+        int slop = LandingSlop(m, crash);
+        return slop > EmbedSlop && CrashStandingOnPlat(m, plat, crash, slop);
+    }
+
+    /// <summary>
+    /// <see cref="EmbedSlop"/> plus the landing-squash lift of Crash's bound
+    /// bottom while he is grounded (GROUNDLAND); plain EmbedSlop otherwise.
+    /// </summary>
+    static int LandingSlop(IMemory m, uint crash)
+    {
+        if ((m.ReadU32(crash + ObjStatusAOff) & FlagGroundLand) == 0) return EmbedSlop;
+        int lift = Math.Min((int)m.ReadU32(crash + ObjBoundOff + 4),
+            (int)m.ReadU32(crash + ObjBoundOff + 16));
+        return lift <= 0 || lift > HalfMeter ? EmbedSlop : EmbedSlop + lift;
     }
 
     /// <summary>
