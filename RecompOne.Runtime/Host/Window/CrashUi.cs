@@ -695,6 +695,7 @@ internal static class CrashUi
     static readonly Vector4 IconIdleDeep = Rgb(46, 44, 40);
     static readonly Vector4 IconOff = Rgb(64, 62, 56, 0.7f);
     static readonly Vector4 Go = Rgb(96, 208, 72);
+    static readonly Vector4 Steel = Rgb(184, 192, 202);
     static readonly Vector4 Danger = Rgb(255, 72, 56);
     static readonly Dictionary<string, float> _iconPhase = new();
 
@@ -768,7 +769,7 @@ internal static class CrashUi
             {
                 // Gear that spins while hot and coasts to a stop.
                 float a = phase * 2.6f;
-                uint col = P(WumpaHot, IconIdle);
+                uint col = P(Steel, IconIdle);
                 const int teeth = 8;
                 for (int i = 0; i < teeth; i++)
                 {

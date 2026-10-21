@@ -37,7 +37,10 @@ public sealed class NativeLauncherUi : UserControl, ILauncherUi
     };
 
     readonly Panel _stage = new() { Dock = DockStyle.Fill };
-    readonly System.Windows.Forms.Timer _anim = new() { Interval = 33 };
+    // ~60 Hz for the menu icon animations; the crate bob is scaled by real dt.
+    readonly System.Windows.Forms.Timer _anim = new() { Interval = 16 };
+    readonly System.Diagnostics.Stopwatch _animClock = System.Diagnostics.Stopwatch.StartNew();
+    double _animLast;
     readonly List<MenuHit> _menuHits = [];
 
     Image? _map;
@@ -66,8 +69,13 @@ public sealed class NativeLauncherUi : UserControl, ILauncherUi
     const int FocusCount = 8;
 
     int _focusIndex;
+    // Start Game is disabled until the disc check finishes; focus it then unless the player moved.
+    bool _startFocusPending = true;
     bool _canStart;
     float _cratePhase;
+    // Hot-row icon ease and animation phase per menu entry (MenuIcons).
+    readonly float[] _menuT = new float[MenuCount];
+    readonly float[] _menuPhase = new float[MenuCount];
     string _status = "";
     string _statusKind = "";
     string _discPath = "";
@@ -161,9 +169,13 @@ public sealed class NativeLauncherUi : UserControl, ILauncherUi
 
         _anim.Tick += (_, _) =>
         {
-            _cratePhase += 0.065f;
+            var now = _animClock.Elapsed.TotalSeconds;
+            var dt = (float)Math.Min(0.1, now - _animLast);
+            _animLast = now;
+            _cratePhase += 0.065f * dt / 0.033f;
             if (_cratePhase > MathF.PI * 2) _cratePhase -= MathF.PI * 2;
             _stage.Invalidate(_crateRect.InflateCopy(12, 16));
+            AnimateMenu(dt);
             PollController();
         };
     }
@@ -431,6 +443,7 @@ public sealed class NativeLauncherUi : UserControl, ILauncherUi
         if (_hoverInfo) _focusIndex = FocusInfo;
         else if (_hoverChip) _focusIndex = FocusChip;
         _stage.Cursor = (_hoverMenu >= 0 || _hoverInfo || _hoverChip) ? Cursors.Hand : Cursors.Default;
+        if (prevFocus != _focusIndex) _startFocusPending = false;
         if (prevMenu != _hoverMenu || prevInfo != _hoverInfo || prevChip != _hoverChip || prevFocus != _focusIndex)
             _stage.Invalidate();
     }
@@ -626,6 +639,7 @@ public sealed class NativeLauncherUi : UserControl, ILauncherUi
             next = (next + delta + FocusCount) % FocusCount;
             if (IsFocusSelectable(next))
             {
+                _startFocusPending = false;
                 if (next != _focusIndex)
                 {
                     _focusIndex = next;
@@ -649,6 +663,12 @@ public sealed class NativeLauncherUi : UserControl, ILauncherUi
 
     void EnsureFocusValid()
     {
+        if (_startFocusPending && _canStart)
+        {
+            _startFocusPending = false;
+            _focusIndex = 0;
+            return;
+        }
         if (IsFocusSelectable(_focusIndex)) return;
         for (var i = 0; i < FocusCount; i++)
         {
@@ -971,6 +991,65 @@ public sealed class NativeLauncherUi : UserControl, ILauncherUi
         g.DrawEllipse(pen, r);
     }
 
+    /// <summary>Eases the hot row's icon in and out; repaints the menu column while it moves.</summary>
+    void AnimateMenu(float dt)
+    {
+        var busy = false;
+        for (var i = 0; i < MenuCount; i++)
+        {
+            var hot = IsMenuHot(i) && !(i == 0 && !_canStart);
+            var before = _menuT[i];
+            MenuIcons.Step(ref _menuT[i], ref _menuPhase[i], hot, dt);
+            busy |= _menuT[i] > 0f || before > 0f;
+        }
+        if (!busy || _menuHits.Count == 0) return;
+        var area = _menuHits[0].Bounds;
+        foreach (var hit in _menuHits) area = Rectangle.Union(area, hit.Bounds);
+        area.Inflate(8, 8);
+        area.Width += MenuIconSlide;
+        _stage.Invalidate(area);
+    }
+
+    /// <summary>How far the hot label slides right to make room for its icon.</summary>
+    const int MenuIconSlide = 46;
+
+    static void PaintIcon(Graphics g, List<MenuIcons.Shape> shapes)
+    {
+        foreach (var s in shapes)
+        {
+            var col = Color.FromArgb(s.Color.A, s.Color.R, s.Color.G, s.Color.B);
+            switch (s.Type)
+            {
+                case MenuIcons.ShapeType.Poly:
+                {
+                    using var br = new SolidBrush(col);
+                    g.FillPolygon(br, s.Points.Select(p => new PointF(p.X, p.Y)).ToArray());
+                    break;
+                }
+                case MenuIcons.ShapeType.Line:
+                {
+                    using var pen = new Pen(col, s.Width) { StartCap = LineCap.Round, EndCap = LineCap.Round };
+                    g.DrawLine(pen, s.Points[0].X, s.Points[0].Y, s.Points[1].X, s.Points[1].Y);
+                    break;
+                }
+                case MenuIcons.ShapeType.Circle:
+                {
+                    using var br = new SolidBrush(col);
+                    var c = s.Points[0];
+                    g.FillEllipse(br, c.X - s.Radius, c.Y - s.Radius, s.Radius * 2, s.Radius * 2);
+                    break;
+                }
+                case MenuIcons.ShapeType.Ring:
+                {
+                    using var pen = new Pen(col, s.Width);
+                    var c = s.Points[0];
+                    g.DrawEllipse(pen, c.X - s.Radius, c.Y - s.Radius, s.Radius * 2, s.Radius * 2);
+                    break;
+                }
+            }
+        }
+    }
+
     void DrawMenu(Graphics g)
     {
         if (_fontMenu == null) return;
@@ -981,16 +1060,25 @@ public sealed class NativeLauncherUi : UserControl, ILauncherUi
             var hot = IsMenuHot(i) && !disabled;
             Color color;
             if (disabled) color = Color.FromArgb(128, 122, 117, 104);
+            else if (hot && i == MenuCount - 1) color = NativeTheme.Danger;
             else if (i == 0) color = hot ? NativeTheme.WumpaHot : NativeTheme.Wumpa;
             else if (hot) color = NativeTheme.WumpaHot;
             else color = NativeTheme.Sand;
 
-            var origin = hit.Bounds.Location;
-            if (hot) origin.Offset(10, 0);
-
+            float t = disabled ? 0f : _menuT[i];
             using var path = new GraphicsPath();
             path.AddString(hit.Label, _fontMenu.FontFamily, (int)_fontMenu.Style, _fontMenu.Size,
-                origin, StringFormat.GenericTypographic);
+                hit.Bounds.Location, StringFormat.GenericTypographic);
+            var textBox = path.GetBounds();
+            if (t > 0f)
+            {
+                using var slide = new Matrix();
+                slide.Translate(MenuIconSlide * t, 0);
+                path.Transform(slide);
+                var icon = MenuIcons.Build(MenuIcons.MainMenu[i],
+                    new System.Numerics.Vector2(hit.Bounds.X + 18, textBox.Y + textBox.Height / 2f), 16f, t, _menuPhase[i]);
+                PaintIcon(g, icon);
+            }
             using (var shadow = new SolidBrush(Color.FromArgb(180, 0, 0, 0)))
             {
                 using var sp = (GraphicsPath)path.Clone();

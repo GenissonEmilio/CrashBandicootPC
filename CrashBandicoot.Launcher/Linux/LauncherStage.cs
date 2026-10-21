@@ -3,6 +3,7 @@ using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Media;
 using Avalonia.Media.Imaging;
+using CrashBandicoot.Launcher.Ui;
 using static CrashBandicoot.Launcher.Linux.LinuxTheme;
 
 namespace CrashBandicoot.Launcher.Linux;
@@ -32,6 +33,8 @@ sealed class LauncherStage : Panel
 
     int _focusIndex;
     bool _canStart;
+    // Start Game is disabled until the disc check finishes; focus it then unless the player moved.
+    bool _startFocusPending = true;
     string _status = "";
     string _statusKind = "";
     string _discPath = "";
@@ -73,6 +76,7 @@ sealed class LauncherStage : Panel
         _crate.Phase += 0.065f;
         if (_crate.Phase > MathF.PI * 2) _crate.Phase -= MathF.PI * 2;
         _crate.InvalidateVisual();
+        _menu.Animate();
     }
 
     public void MoveFocus(int delta)
@@ -98,6 +102,7 @@ sealed class LauncherStage : Panel
 
     void SetFocusIndex(int index)
     {
+        _startFocusPending = false;
         if (_focusIndex == index) return;
         _focusIndex = index;
         _menu.InvalidateVisual();
@@ -114,6 +119,12 @@ sealed class LauncherStage : Panel
 
     void EnsureFocusValid()
     {
+        if (_startFocusPending && _canStart)
+        {
+            _startFocusPending = false;
+            _focusIndex = 0;
+            return;
+        }
         if (IsFocusSelectable(_focusIndex)) return;
         for (var i = 0; i < FocusCount; i++)
         {
@@ -330,8 +341,15 @@ sealed class LauncherStage : Panel
     sealed class MenuView : Control
     {
         public const int Row = 62;
+        /// <summary>How far the hot label slides right to make room for its icon.</summary>
+        const int IconSlide = 46;
         readonly LauncherStage _stage;
         int _hover = -1;
+        // Hot-row icon ease and animation phase per entry (MenuIcons).
+        readonly float[] _t = new float[MenuCount];
+        readonly float[] _phase = new float[MenuCount];
+        readonly System.Diagnostics.Stopwatch _clock = System.Diagnostics.Stopwatch.StartNew();
+        double _last;
 
         public MenuView(LauncherStage stage) => _stage = stage;
 
@@ -371,6 +389,59 @@ sealed class LauncherStage : Panel
             _stage.Activate(i);
         }
 
+        bool IsHot(int i) => !(i == 0 && !_stage._canStart) && (_hover == i || _stage._focusIndex == i);
+
+        /// <summary>Eases the hot row's icon in and out (from the stage animation timer).</summary>
+        public void Animate()
+        {
+            var now = _clock.Elapsed.TotalSeconds;
+            var dt = (float)(now - _last);
+            _last = now;
+            var busy = false;
+            for (var i = 0; i < MenuCount; i++)
+            {
+                var before = _t[i];
+                MenuIcons.Step(ref _t[i], ref _phase[i], IsHot(i), dt);
+                busy |= _t[i] > 0f || before > 0f;
+            }
+            if (busy) InvalidateVisual();
+        }
+
+        static void PaintIcon(DrawingContext g, List<MenuIcons.Shape> shapes)
+        {
+            foreach (var s in shapes)
+            {
+                var col = Color.FromArgb(s.Color.A, s.Color.R, s.Color.G, s.Color.B);
+                switch (s.Type)
+                {
+                    case MenuIcons.ShapeType.Poly:
+                    {
+                        var geo = new StreamGeometry();
+                        using (var ctx = geo.Open())
+                        {
+                            ctx.BeginFigure(new Point(s.Points[0].X, s.Points[0].Y), true);
+                            for (var k = 1; k < s.Points.Length; k++)
+                                ctx.LineTo(new Point(s.Points[k].X, s.Points[k].Y));
+                            ctx.EndFigure(true);
+                        }
+                        g.DrawGeometry(Brush(col), null, geo);
+                        break;
+                    }
+                    case MenuIcons.ShapeType.Line:
+                        g.DrawLine(new Pen(Brush(col), s.Width, lineCap: PenLineCap.Round),
+                            new Point(s.Points[0].X, s.Points[0].Y), new Point(s.Points[1].X, s.Points[1].Y));
+                        break;
+                    case MenuIcons.ShapeType.Circle:
+                        g.DrawEllipse(Brush(col), null, new Point(s.Points[0].X, s.Points[0].Y), s.Radius, s.Radius);
+                        break;
+                    case MenuIcons.ShapeType.Ring:
+                        g.DrawEllipse(null, new Pen(Brush(col), s.Width),
+                            new Point(s.Points[0].X, s.Points[0].Y), s.Radius, s.Radius);
+                        break;
+                }
+            }
+        }
+
         public override void Render(DrawingContext g)
         {
             // Transparent fill keeps the whole column hit-testable for hover.
@@ -381,13 +452,21 @@ sealed class LauncherStage : Panel
                 var hot = !disabled && (_hover == i || _stage._focusIndex == i);
                 Color color;
                 if (disabled) color = Argb(128, 122, 117, 104);
+                else if (hot && i == MenuCount - 1) color = Danger;
                 else if (hot) color = WumpaHot;
                 else if (i == 0) color = Wumpa;
                 else color = Sand;
 
-                var origin = new Point(hot ? 10 : 0, i * Row);
+                var t = disabled ? 0f : _t[i];
+                var origin = new Point(IconSlide * t, i * Row);
                 var geo = Text(MenuLabels[i], BungeeFace, 38, Brushes.White).BuildGeometry(origin);
                 if (geo == null) continue;
+                if (t > 0f)
+                {
+                    var box = geo.Bounds;
+                    PaintIcon(g, MenuIcons.Build(MenuIcons.MainMenu[i],
+                        new System.Numerics.Vector2(18f, (float)(box.Y + box.Height / 2)), 16f, t, _phase[i]));
+                }
                 using (g.PushTransform(Matrix.CreateTranslation(0, 2)))
                     g.DrawGeometry(Brush(180, 0, 0, 0), null, geo);
                 g.DrawGeometry(Brush(color), null, geo);
