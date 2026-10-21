@@ -75,8 +75,8 @@ static class MenuIcons
             }
             case Kind.Gamepad:
             {
-                // PS1 pad that rocks; the face buttons light up in turn.
-                float a = 0.18f * MathF.Sin(phase * 6f) * t;
+                // PS1 pad, held still; only the face buttons light up in turn.
+                const float a = 0f;
                 Rgba body = Col(PadGray);
                 Line(Rot(V(-0.55f, -0.08f), a), Rot(V(0.55f, -0.08f), a), 0.62f * r, body);
                 Line(Rot(V(-0.6f, 0f), a), Rot(V(-0.74f, 0.5f), a), 0.42f * r, body);
@@ -89,7 +89,7 @@ static class MenuIcons
                 Line(Rot(V(-0.54f, -0.26f), a), Rot(V(-0.54f, 0.1f), a), dw, dark);
                 Vector3[] face = [new(70, 200, 150), new(255, 80, 80), new(90, 150, 255), new(255, 130, 200)];
                 Vector2[] at = [new(0f, -0.18f), new(0.18f, 0f), new(0f, 0.18f), new(-0.18f, 0f)];
-                int lit = (int)(phase * 6f) % 4;
+                int lit = (int)(phase * 3f) % 4;
                 for (int i = 0; i < 4; i++)
                 {
                     var p = Rot(V(0.55f + at[i].X, -0.08f + at[i].Y), a);
@@ -117,13 +117,14 @@ static class MenuIcons
             }
             case Kind.Puzzle:
             {
-                // Puzzle piece (mods) that wiggles into place.
-                float a = 0.22f * MathF.Sin(phase * 8f) * t;
+                // Puzzle piece (mods): slides into place once as the hover eases in, then stays.
+                float k = 1f - t;
+                var o = new Vector2(0.35f * k, -0.35f * k);
                 Rgba col = Col(PieceBlue);
-                Poly(col, Rot(V(-0.75f, -0.45f), a), Rot(V(0.45f, -0.45f), a),
-                    Rot(V(0.45f, 0.75f), a), Rot(V(-0.75f, 0.75f), a));
-                Dot(Rot(V(-0.15f, -0.62f), a), 0.24f * r, col);
-                Dot(Rot(V(0.62f, 0.15f), a), 0.24f * r, col);
+                Poly(col, V(o.X - 0.75f, o.Y - 0.45f), V(o.X + 0.45f, o.Y - 0.45f),
+                    V(o.X + 0.45f, o.Y + 0.75f), V(o.X - 0.75f, o.Y + 0.75f));
+                Dot(V(o.X - 0.15f, o.Y - 0.62f), 0.24f * r, col);
+                Dot(V(o.X + 0.62f, o.Y + 0.15f), 0.24f * r, col);
                 break;
             }
             case Kind.Bolt:
