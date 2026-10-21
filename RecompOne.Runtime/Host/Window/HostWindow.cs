@@ -479,6 +479,43 @@ internal static class HostWindow
     /// </summary>
     public static void RequestEndSession() => _endSessionRequested = true;
 
+    static bool _frozen;
+
+    /// <summary>
+    /// Pause menu open: park the game thread here and keep drawing the last game frame and
+    /// the UI, so nothing in the game advances (cutscenes, demos, music, timers). Returns
+    /// when the menu closes, also for Exit to Map; Return to Launcher ends the session in Present.
+    /// </summary>
+    public static void HoldWhilePaused()
+    {
+        if (_window == null || !PauseHolds()) return;
+        long start = System.Diagnostics.Stopwatch.GetTimestamp();
+        _frozen = true;
+        Audio.Paused = true;
+        try
+        {
+            while (_window != null && PauseHolds())
+            {
+                Present(_gpu);
+                FrameClock.Throttle();
+                // Uncapped without VSync would spin the menu at thousands of FPS.
+                if (FrameClock.SkipThrottle)
+                    PreciseSleep.Sleep(3.0);
+                Diagnostics.FrameTimer.Mark(Diagnostics.FrameTimer.Phase.Wait);
+                Diagnostics.FrameTimer.EndFrame();
+            }
+        }
+        finally
+        {
+            _frozen = false;
+            Audio.Paused = false;
+            FramePacing.SkipWallTime(System.Diagnostics.Stopwatch.GetTimestamp() - start);
+        }
+    }
+
+    static bool PauseHolds() =>
+        PanelManager.Get<PauseMenuPopup>()?.IsOpen == true && !ExitToMapInjector.Active;
+
     public static void Shutdown()
     {
         if (_window != null)
@@ -821,8 +858,12 @@ internal static class HostWindow
         var gpu = _gpu;
         if (gpu != null)
         {
-
-            if (Hle.GpuHle.Active && _glBackend is { Ready: true } && gpu.DisplayEnabled)
+            if (_frozen)
+            {
+                // Paused (HoldWhilePaused): keep the last presented texture. Re-presenting
+                // idle render targets would drop the 16:9 margins after a few frames.
+            }
+            else if (Hle.GpuHle.Active && _glBackend is { Ready: true } && gpu.DisplayEnabled)
             {
                 var wf = _window!.FramebufferSize;
                 int displayY = gpu.DisplayY;

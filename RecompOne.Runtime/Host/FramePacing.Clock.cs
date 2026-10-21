@@ -954,4 +954,15 @@ public static partial class FramePacing
 
     public static void NoteVblankIrq() => _irqTs = Stopwatch.GetTimestamp();
 
+    /// <summary>
+    /// The host pause menu parked the game thread for <paramref name="ticks"/> (Stopwatch
+    /// ticks): leave that wall time out of the next sim step and the VBlank IRQ clock.
+    /// </summary>
+    public static void SkipWallTime(long ticks)
+    {
+        if (ticks <= 0) return;
+        if (_simTs != 0) _simTs += ticks;
+        if (_irqTs != 0) _irqTs += ticks;
+    }
+
 }

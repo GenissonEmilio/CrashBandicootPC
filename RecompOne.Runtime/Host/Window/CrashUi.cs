@@ -145,6 +145,12 @@ internal static class CrashUi
         C(ImGuiCol.TableRowBg, Vector4.Zero);
         C(ImGuiCol.TableRowBgAlt, A(Sand, 0.03f));
         C(ImGuiCol.NavHighlight, A(WumpaHot, 0.5f));
+        // Inner tab bars (Input: Keyboard/Gamepad, Pad 1/2) were stock ImGui blue.
+        C(ImGuiCol.Tab, A(Sand, 0.07f));
+        C(ImGuiCol.TabHovered, A(Wumpa, 0.38f));
+        C(ImGuiCol.TabActive, A(Wumpa, 0.55f));
+        C(ImGuiCol.TabUnfocused, A(Sand, 0.07f));
+        C(ImGuiCol.TabUnfocusedActive, A(Wumpa, 0.45f));
 
         F(ImGuiStyleVar.WindowRounding, (card ? 10f : 8f) * ui);
         F(ImGuiStyleVar.ChildRounding, 6f * ui);
@@ -373,6 +379,74 @@ internal static class CrashUi
         }
         if (!enabled) ImGui.EndDisabled();
         return clicked && enabled;
+    }
+
+    /// <summary>
+    /// Section tabs of the launcher Settings sheet: equal-width boxes across the card, the
+    /// selected one filled Wumpa. Returns the selected index. Old style: ImGui tab bar.
+    /// </summary>
+    public static int Tabs(string id, IReadOnlyList<string> labels, int selected, float ui)
+    {
+        if (labels.Count == 0) return selected;
+        if (!Enabled) return ClassicTabs(id, labels, selected);
+
+        float gap = 8f * ui;
+        float h = 30f * ui;
+        float avail = ImGui.GetContentRegionAvail().X;
+        float w = Math.Max(1f, (avail - gap * (labels.Count - 1)) / labels.Count);
+        float r = 2f * ui;
+        var dl = ImGui.GetWindowDrawList();
+        int result = selected;
+        for (int i = 0; i < labels.Count; i++)
+        {
+            if (i > 0) ImGui.SameLine(0f, gap);
+            if (ImGui.InvisibleButton($"##{id}-{i}", new Vector2(w, h)))
+                result = i;
+            bool hover = ImGui.IsItemHovered();
+            bool focus = ImGui.IsItemFocused() && ImGui.GetIO().NavVisible;
+            bool sel = i == selected;
+            var min = ImGui.GetItemRectMin();
+            var max = ImGui.GetItemRectMax();
+
+            var back = sel ? (hover ? WumpaHot : Wumpa) : (hover ? Rgb(48, 32, 20) : Rgb(28, 18, 12));
+            dl.AddRectFilled(min, max, U32(back), r);
+            if (focus)
+                dl.AddRect(min + new Vector2(1f), max - new Vector2(1f), U32(Sand), r, ImDrawFlags.None, 2f);
+            else
+                dl.AddRect(min, max, sel ? U32(Rgb(255, 180, 60), 0.86f) : U32(Rgb(255, 200, 120), 0.55f), r);
+
+            // Many sections (mods add their own): shrink the label to the tab.
+            string text = labels[i].ToUpperInvariant();
+            float size = 14f * ui;
+            var font = Display(size);
+            float tw = font.CalcTextSizeA(size, float.MaxValue, 0f, text).X;
+            float room = w - 10f * ui;
+            if (tw > room && tw > 0f)
+            {
+                size *= room / tw;
+                tw = room;
+            }
+            var pos = new Vector2(min.X + (w - tw) * 0.5f, min.Y + (h - size) * 0.5f);
+            if (sel)
+                dl.AddText(font, size, pos, U32(Rgb(42, 18, 0)), text);
+            else
+                ShadowText(dl, font, size, pos, Sand, text, ui);
+        }
+        return result;
+    }
+
+    static int ClassicTabs(string id, IReadOnlyList<string> labels, int selected)
+    {
+        int result = selected;
+        if (!ImGui.BeginTabBar("##" + id)) return result;
+        for (int i = 0; i < labels.Count; i++)
+        {
+            if (!ImGui.BeginTabItem($"{labels[i]}##{id}-{i}")) continue;
+            result = i;
+            ImGui.EndTabItem();
+        }
+        ImGui.EndTabBar();
+        return result;
     }
 
     /// <summary>Fading Wumpa rule between blocks (old style: separator).</summary>

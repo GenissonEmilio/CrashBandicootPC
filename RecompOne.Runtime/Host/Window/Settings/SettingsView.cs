@@ -4,23 +4,41 @@ using ImGuiNET;
 namespace RecompOne.Runtime.Host.Window;
 
 /// <summary>
-/// Settings page drawn inside the pause card (<see cref="PauseMenuPopup"/>): section list on
-/// the left, the selected section on the right. Not a window of its own.
+/// Settings page drawn inside the pause card (<see cref="PauseMenuPopup"/>): section tabs
+/// across the top like the launcher Settings sheet, the selected section below. Not a
+/// window of its own.
 /// </summary>
 internal sealed class SettingsView
 {
-    const float SidebarWidth = 150f;
     string _selectedId = "";
 
-    /// <summary>Draws the sidebar and content side by side, <paramref name="height"/> px tall.</summary>
+    /// <summary>Draws the tabs and the selected section, <paramref name="height"/> px tall.</summary>
     public void Draw(float ui, float height)
     {
         var sections = SettingsRegistry.Sections;
         var current = ResolveSelection(sections);
+        float top = ImGui.GetCursorPosY();
 
-        DrawSidebar(sections, current, ui, height);
-        ImGui.SameLine();
-        DrawContent(current, height);
+        if (current != null)
+        {
+            var titles = new string[sections.Count];
+            int index = 0;
+            for (int i = 0; i < sections.Count; i++)
+            {
+                titles[i] = sections[i].Title;
+                if (sections[i] == current) index = i;
+            }
+            int picked = CrashUi.Tabs("settings-tabs", titles, index, ui);
+            if (picked != index)
+            {
+                current = sections[picked];
+                _selectedId = current.Id;
+            }
+            ImGui.Dummy(new Vector2(0f, 2f * ui));
+        }
+
+        float used = ImGui.GetCursorPosY() - top;
+        DrawContent(current, Math.Max(40f * ui, height - used));
     }
 
     ISettingsSection? ResolveSelection(IReadOnlyList<ISettingsSection> sections)
@@ -30,19 +48,6 @@ internal sealed class SettingsView
             if (s.Id == _selectedId) return s;
         _selectedId = sections[0].Id;
         return sections[0];
-    }
-
-    void DrawSidebar(IReadOnlyList<ISettingsSection> sections, ISettingsSection? current, float ui, float height)
-    {
-        ImGui.BeginChild("##settings-sidebar", new Vector2(SidebarWidth * ui, height), ImGuiChildFlags.Border);
-
-        foreach (var s in sections)
-        {
-            if (ImGui.Selectable($"{s.Title}##sec-{s.Id}", current == s))
-                _selectedId = s.Id;
-        }
-
-        ImGui.EndChild();
     }
 
     static void DrawContent(ISettingsSection? current, float height)
@@ -57,12 +62,7 @@ internal sealed class SettingsView
         }
         else
         {
-            if (CrashUi.Enabled)
-                CrashUi.Caption(current.Title);
-            else
-                ImGui.TextUnformatted(current.Title);
-            ImGui.Separator();
-            ImGui.Spacing();
+            // The tab already names the section, so no title row here.
             current.Draw();
             foreach (var ext in SettingsRegistry.GetExtensions(current.Id))
                 ext();

@@ -137,6 +137,8 @@ public static class Runtime
         {
             HostWindow.Present(Gpu);
             Audio.Attach(Spu);
+            // Esc pause menu: the whole game stops here until it closes.
+            HostWindow.HoldWhilePaused();
         }
         FrameClock.Throttle();
         Host.Diagnostics.FrameTimer.Mark(Host.Diagnostics.FrameTimer.Phase.Wait);

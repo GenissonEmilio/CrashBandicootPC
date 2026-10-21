@@ -25,8 +25,19 @@ internal static unsafe class Audio
     static volatile bool _running;
     static float _masterVolume = 1.0f;
     static bool _ready;
+    static volatile bool _paused;
 
     public static bool IsReady => _ready;
+
+    /// <summary>
+    /// Host pause menu: stop the source and stop pulling the SPU, so held notes freeze
+    /// instead of droning while the game thread is parked. Resume continues the queue.
+    /// </summary>
+    public static bool Paused
+    {
+        get => _paused;
+        set => _paused = value;
+    }
 
     public static void Initialize()
     {
@@ -164,12 +175,22 @@ internal static unsafe class Audio
         {
             var spu = _spu;
             int processed = 0;
-            if (spu != null && _ready)
+            if (_ready && _paused)
+                HoldSource();
+            else if (spu != null && _ready)
                 processed = FillBuffers(spu);
 
             // Sleep longer when the queue is full; stay tight when catching up after underrun.
             Thread.Sleep(processed > 0 ? BusySleepMs : IdleSleepMs);
         }
+    }
+
+    /// <summary>Paused: FillBuffers sees the source stopped on resume and plays it again.</summary>
+    static void HoldSource()
+    {
+        _al!.GetSourceProperty(_source, GetSourceInteger.SourceState, out int state);
+        if (state == (int)SourceState.Playing)
+            _al.SourcePause(_source);
     }
 
     static int FillBuffers(Spu spu)

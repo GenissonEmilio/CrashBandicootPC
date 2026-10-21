@@ -9,6 +9,7 @@ namespace RecompOne.Runtime.Host.Window;
 /// ESC pause overlay: resume, settings, open the in-game save/exit flow, or leave the session.
 /// Drawn in the launcher look (<see cref="CrashUi"/>) unless CrashMenuStyle is off. Settings
 /// is a second page of the same card (<see cref="SettingsView"/>), not a separate window.
+/// While open the game thread is parked in <see cref="HostWindow.HoldWhilePaused"/>.
 /// </summary>
 internal sealed class PauseMenuPopup : IPanel
 {
